@@ -25,7 +25,7 @@ func RunPvE() {
 		bot = NewBot('o', "RandomBot")
 		fmt.Println("You will face RandomBot!")
 	case 2:
-		bot = NewMinimaxBot('o', "MinimaxBot", 3, 3) // Depth 3, Base 3
+		bot = NewMinimaxBot('o', "MinimaxBot", 6, 3, 6) // Depth 3, Base 3, Max Power 6
 		fmt.Println("You will face MinimaxBot!")
 	default:
 		fmt.Println("Invalid choice, defaulting to RandomBot.")
@@ -72,12 +72,13 @@ func RunPvE() {
 		
 		// Bot's turn
 		fmt.Printf("\n%s is thinking...\n", getBotName(bot))
-		time.Sleep(1 * time.Second) // Add some delay for dramatic effect
-		
+
+		start := time.Now()
 		botMove, botCoords := bot.MakeMove(board)
 		if botCoords[0] == -1 && botCoords[1] == -1 && botCoords[2] == -1 {
 			break // No valid moves left
 		}
+		fmt.Printf("Time taken by %s: %v\n", getBotName(bot), time.Since(start))
 		
 		fmt.Printf("%s plays %s at coordinates: (%d, %d, %d)\n", getBotName(bot), botMove, botCoords[0], botCoords[1], botCoords[2])
 		totalMoves++

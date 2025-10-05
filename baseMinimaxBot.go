@@ -10,10 +10,9 @@ type MinimaxBot struct {
 }
 
 // NewMinimaxBot creates a new minimax bot with the given symbol, name, and search depth
-func NewMinimaxBot(symbol byte, name string, depth int, base int) *MinimaxBot {
+func NewMinimaxBot(symbol byte, name string, depth int, base int, maxPower int) *MinimaxBot {
 	// Precompute powers up to base^winLength (we need up to winLength powers)
 	// For safety, compute a few extra powers
-	maxPower := 6 // Should cover most reasonable win lengths
 	powers := make([]int, maxPower+1)
 	powers[0] = 1 // base^0 = 1
 	for i := 1; i <= maxPower; i++ {
@@ -32,37 +31,13 @@ func NewMinimaxBot(symbol byte, name string, depth int, base int) *MinimaxBot {
 // MakeMove makes a move using minimax algorithm (implements BotInterface)
 // Currently uses evaluation function only - returns best evaluated move
 func (bot *MinimaxBot) MakeMove(board *Board) (string, [3]int) {
-	// TODO: Implement full minimax algorithm
-	// For now, use simple evaluation to pick the best immediate move
-
-	validMoves := board.GetValidMoves()
-	if len(validMoves) == 0 {
-		return "", [3]int{-1, -1, -1}
+	_, bestMoves := minimax(board, bot.Depth, bot.Symbol == 'x', bot.Powers)
+	if len(bestMoves) == 0 {
+		return "", [3]int{-1, -1, -1} // No valid moves
 	}
-
-	bestMove := validMoves[0]
-	bestScore := -999999 // Very low initial score
-
-	// Try each valid move and pick the one with best evaluation
-	for _, move := range validMoves {
-		// Create a deep copy of the board to test the move
-		testBoard := copyBoard(board)
-		coords := testBoard.Move(move, bot.Symbol)
-		if coords[0] != -1 { // Valid move
-			score := EvalExpo(testBoard, bot.Powers)
-			// If bot is 'o', we want lower scores (negative is good for 'o')
-			if bot.Symbol == 'o' {
-				score = -score
-			}
-			if score > bestScore {
-				bestScore = score
-				bestMove = move
-			}
-		}
-	}
-
-	// Make the actual move
-	return bestMove, board.Move(bestMove, bot.Symbol)
+	bestMove := bestMoves[0] // Pick the first best move
+	coords := board.Move(bestMove, bot.Symbol)
+	return bestMove, coords
 }
 
 // copyBoard creates a deep copy of the board for testing moves
@@ -136,6 +111,36 @@ func EvalExpo(board *Board, powers []int) int {
 	return score
 }
 
-// - evaluateBoard(board *Board) int
-// - minimax(board *Board, depth int, isMaximizing bool, alpha int, beta int) int
-// - getBestMove(board *Board) (string, [3]int)
+// Default minimax function, returns pair of (score, array of best moves)
+func minimax(board *Board, depth int, isMaximizing bool, powers []int) (int, []string) {
+	if depth == 0 {
+		return EvalExpo(board, powers), []string{}
+	}
+	
+	// Set result to very low/high initial value
+	const MAX_INT = int(^uint(0) >> 1)
+	const MIN_INT = -MAX_INT - 1
+	var symbol byte = 'x'
+	bestScore := MIN_INT
+	if !isMaximizing {
+		symbol = 'o'
+		bestScore = MAX_INT
+	}
+	bestMoves := []string{}
+
+	for _, move := range board.GetValidMoves() {
+		// Create a deep copy of the board to test the move
+		testBoard := copyBoard(board)
+		testBoard.Move(move, symbol)
+		score, moves := minimax(testBoard, depth-1, !isMaximizing, powers)
+		if isMaximizing && score > bestScore {
+			bestScore = score
+			bestMoves = append([]string{move}, moves...)
+		} else if !isMaximizing && score < bestScore {
+			bestScore = score
+			bestMoves = append([]string{move}, moves...)
+		}
+	}
+
+	return bestScore, bestMoves
+}

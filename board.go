@@ -103,8 +103,8 @@ func (b *Board) Move(moveStr string, player byte) [3]int {
 	}
 	
 	// Get column
-	col := moveStr[0] - 'A'
-	if col < 0 || col >= byte(b.Length) {
+	col := int(moveStr[0]) - int('A')
+	if col < 0 || col >= b.Length {
 		return [3]int{-1, -1, -1}
 	}
 	
@@ -128,7 +128,7 @@ func (b *Board) Move(moveStr string, player byte) [3]int {
 	}
 	b.Grid[col][row][currentHeight] = player
 	b.CurrentHeights[col][row]++
-	b.LastMove = [3]int{int(col), row, currentHeight}
+	b.LastMove = [3]int{col, row, currentHeight}
 	
 	return b.LastMove
 }
