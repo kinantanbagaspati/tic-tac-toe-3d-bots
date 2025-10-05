@@ -116,10 +116,8 @@ func minimax(board *Board, depth int, isMaximizing bool, powers []int) (int, []s
 	if depth == 0 {
 		return EvalExpo(board, powers), []string{}
 	}
-	
+
 	// Set result to very low/high initial value
-	const MAX_INT = int(^uint(0) >> 1)
-	const MIN_INT = -MAX_INT - 1
 	var symbol byte = 'x'
 	bestScore := MIN_INT
 	if !isMaximizing {
