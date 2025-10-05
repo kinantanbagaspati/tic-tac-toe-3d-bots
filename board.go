@@ -4,15 +4,39 @@ import "fmt"
 
 // Board represents a 3D Tic-Tac-Toe board
 type Board struct {
-	Length    int
-	Width     int
-	Height    int
-	WinLength int
-	Grid      [][][]byte
+	Length         int
+	Width          int
+	Height         int
+	WinLength      int
+	Grid           [][][]byte
+	CurrentHeights [][]int // Tracks the current height of each column [length][width]
+	LastMove       [3]int  // Stores the last move coordinates [x, y, z], or [-1, -1, -1] if no moves yet
 }
 
 // NewBoard creates a new board with specified dimensions
-func NewBoard(length, width, height, winLength int) *Board {
+// If no arguments provided, uses default dimensions (4x4x4, win=4)
+// Usage: 
+//   NewBoard() - creates 4x4x4 board with win=4
+//   NewBoard(3) - creates 3x3x3 board with win=3
+//   NewBoard(3, 3, 3, 3) - creates 3x3x3 board with win=3
+func NewBoard(dimensions ...int) *Board {
+	// Default values
+	length, width, height, winLength := 4, 4, 4, 4
+	
+	// Override with provided values
+	if len(dimensions) >= 1 {
+		length = dimensions[0]
+		width = dimensions[0]   // If only one dimension provided, use it for all
+		height = dimensions[0]
+		winLength = dimensions[0]
+	}
+	if len(dimensions) >= 4 {
+		length = dimensions[0]
+		width = dimensions[1]
+		height = dimensions[2]
+		winLength = dimensions[3]
+	}
+	
 	b := &Board{
 		Length:    length,
 		Width:     width,
@@ -25,6 +49,7 @@ func NewBoard(length, width, height, winLength int) *Board {
 
 // Init initializes the board with empty markers
 func (b *Board) Init() {
+	// Initialize the 3D grid
 	b.Grid = make([][][]byte, b.Length)
 	for i := 0; i < b.Length; i++ {
 		b.Grid[i] = make([][]byte, b.Width)
@@ -35,6 +60,16 @@ func (b *Board) Init() {
 			}
 		}
 	}
+	
+	// Initialize the height tracking array
+	b.CurrentHeights = make([][]int, b.Length)
+	for i := 0; i < b.Length; i++ {
+		b.CurrentHeights[i] = make([]int, b.Width)
+		// Heights start at 0 (all columns are empty)
+	}
+	
+	// Initialize last move to indicate no moves yet
+	b.LastMove = [3]int{-1, -1, -1}
 }
 
 // Print displays the board in a 2D projection
@@ -61,39 +96,41 @@ func (b *Board) Print() {
 }
 
 // Move places a player's piece at the specified position
-// Returns the coordinates where the piece was placed, or (-1, -1, -1) if invalid
-func (b *Board) Move(moveStr string, player byte) (int, int, int) {
+// Returns the coordinates where the piece was placed as [3]int, or [-1, -1, -1] if invalid
+func (b *Board) Move(moveStr string, player byte) [3]int {
 	if len(moveStr) < 2 {
-		return -1, -1, -1
+		return [3]int{-1, -1, -1}
 	}
 	
 	// Get column
 	col := moveStr[0] - 'A'
 	if col < 0 || col >= byte(b.Length) {
-		return -1, -1, -1
+		return [3]int{-1, -1, -1}
 	}
 	
 	// Get row
 	row := 0
 	for i := 1; i < len(moveStr); i++ {
 		if moveStr[i] < '0' || moveStr[i] > '9' {
-			return -1, -1, -1
+			return [3]int{-1, -1, -1}
 		}
 		row = row*10 + int(moveStr[i]-'0')
 	}
 	row--
 	if row < 0 || row >= b.Width {
-		return -1, -1, -1
+		return [3]int{-1, -1, -1}
 	}
 	
-	// Find the lowest empty spot in the column
-	for h := 0; h < b.Height; h++ {
-		if b.Grid[col][row][h] == '|' {
-			b.Grid[col][row][h] = player
-			return int(col), row, h
-		}
+	// Try placing the block
+	currentHeight := b.CurrentHeights[col][row]
+	if currentHeight >= b.Height {
+		return [3]int{-1, -1, -1}
 	}
-	return -1, -1, -1
+	b.Grid[col][row][currentHeight] = player
+	b.CurrentHeights[col][row]++
+	b.LastMove = [3]int{int(col), row, currentHeight}
+	
+	return b.LastMove
 }
 
 // IsValidCoordinate checks if the given coordinates are within board bounds
@@ -171,13 +208,9 @@ func (b *Board) GetValidMoves() []string {
 	var validMoves []string
 	for i := 0; i < b.Length; i++ {
 		for j := 0; j < b.Width; j++ {
-			// Check if this column has space
-			for k := 0; k < b.Height; k++ {
-				if b.Grid[i][j][k] == '|' {
-					move := fmt.Sprintf("%c%d", 'A'+byte(i), j+1)
-					validMoves = append(validMoves, move)
-					break // Only need to check if column has space
-				}
+			if b.CurrentHeights[i][j] < b.Height {
+				move := fmt.Sprintf("%c%d", 'A'+byte(i), j+1)
+				validMoves = append(validMoves, move)
 			}
 		}
 	}

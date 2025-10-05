@@ -4,7 +4,7 @@ import "fmt"
 
 // RunPvP starts a Player vs Player game
 func RunPvP() {
-	board := NewBoard(4, 4, 4, 4)
+	board := NewBoard(3) // Using 3x3x3 for testing purposes
 	
 	players := []byte{'x', 'o'}
 	playerNames := []string{"Player X", "Player O"}
@@ -24,14 +24,14 @@ func RunPvP() {
 		var moveInput string
 		fmt.Scanln(&moveInput)
 		
-		x, y, z := board.Move(moveInput, players[currentPlayer])
+		coords := board.Move(moveInput, players[currentPlayer])
 
-		if x == -1 && y == -1 && z == -1 {
+		if coords[0] == -1 && coords[1] == -1 && coords[2] == -1 {
 			fmt.Println("Invalid move! Try again.")
 			continue
 		}
 		
-		fmt.Printf("Move %s placed at coordinates: (%d, %d, %d)\n", moveInput, x, y, z)
+		fmt.Printf("Move %s placed at coordinates: (%d, %d, %d)\n", moveInput, coords[0], coords[1], coords[2])
 		totalMoves++
 		
 		// Check for win
