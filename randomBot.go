@@ -14,6 +14,8 @@ type Bot struct {
 // BotInterface defines the interface that all bots must implement
 type BotInterface interface {
 	MakeMove(board *Board) (string, [3]int)
+	getName() string
+	getSymbol() byte
 }
 
 // NewBot creates a new bot with the given symbol and name
@@ -27,6 +29,16 @@ func NewBot(symbol byte, name string) *Bot {
 // MakeMove makes a random valid move on the board (implements BotInterface)
 func (bot *Bot) MakeMove(board *Board) (string, [3]int) {
 	return bot.MakeRandomMove(board)
+}
+
+// getName returns the bot's name (implements BotInterface)
+func (bot *Bot) getName() string {
+	return bot.Name
+}
+
+// getSymbol returns the bot's symbol (implements BotInterface)
+func (bot *Bot) getSymbol() byte {
+	return bot.Symbol
 }
 
 // MakeRandomMove makes a random valid move on the board

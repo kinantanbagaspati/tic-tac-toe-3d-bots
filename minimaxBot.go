@@ -40,6 +40,16 @@ func (bot *MinimaxBot) MakeMove(board *Board) (string, [3]int) {
 	return bestMove, coords
 }
 
+// getName returns the bot's name (implements BotInterface)
+func (bot *MinimaxBot) getName() string {
+	return bot.Name
+}
+
+// getSymbol returns the bot's symbol (implements BotInterface)
+func (bot *MinimaxBot) getSymbol() byte {
+	return bot.Symbol
+}
+
 // copyBoard creates a deep copy of the board for testing moves
 func copyBoard(original *Board) *Board {
 	// Create new board with same dimensions

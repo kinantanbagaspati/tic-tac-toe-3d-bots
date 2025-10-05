@@ -55,6 +55,16 @@ func (bot *ConcurrentMinimaxBot) MakeMove(board *Board) (string, [3]int) {
 	return bestMove, coords
 }
 
+// getName returns the bot's name (implements BotInterface)
+func (bot *ConcurrentMinimaxBot) getName() string {
+	return bot.Name
+}
+
+// getSymbol returns the bot's symbol (implements BotInterface)
+func (bot *ConcurrentMinimaxBot) getSymbol() byte {
+	return bot.Symbol
+}
+
 // concurrentMinimax evaluates all possible moves concurrently and returns the best one
 func concurrentMinimax(board *Board, depth int, isMaximizing bool, powers []int, validMoves []string) string {
 	if len(validMoves) == 0 {

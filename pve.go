@@ -40,7 +40,7 @@ func RunPvE() {
 	maxMoves := board.Length * board.Width * board.Height
 
 	fmt.Println("\nWelcome to 3D Tic-Tac-Toe!")
-	fmt.Printf("You are 'x', %s is 'o'\n", getBotName(bot))
+	fmt.Printf("You are 'x', %s is 'o'\n", bot.getName())
 	fmt.Printf("Enter moves in format like A1, B2, etc. (A-%c, 1-%d)\n", 'A'+byte(board.Length-1), board.Width)
 	fmt.Println()
 
@@ -75,23 +75,23 @@ func RunPvE() {
 		}
 
 		// Bot's turn
-		fmt.Printf("\n%s is thinking...\n", getBotName(bot))
+		fmt.Printf("\n%s is thinking...\n", bot.getName())
 
 		start := time.Now()
 		botMove, botCoords := bot.MakeMove(board)
 		if botCoords[0] == -1 && botCoords[1] == -1 && botCoords[2] == -1 {
 			break // No valid moves left
 		}
-		fmt.Printf("Time taken by %s: %v\n", getBotName(bot), time.Since(start))
+		fmt.Printf("Time taken by %s: %v\n", bot.getName(), time.Since(start))
 
-		fmt.Printf("%s plays %s at coordinates: (%d, %d, %d)\n", getBotName(bot), botMove, botCoords[0], botCoords[1], botCoords[2])
+		fmt.Printf("%s plays %s at coordinates: (%d, %d, %d)\n", bot.getName(), botMove, botCoords[0], botCoords[1], botCoords[2])
 		totalMoves++
 
 		// Check for bot win
 		winner = board.CheckWin()
-		if winner == getBotSymbol(bot) {
+		if winner == bot.getSymbol() {
 			board.Print()
-			fmt.Printf("\n🤖 %s wins! Better luck next time! 🤖\n", getBotName(bot))
+			fmt.Printf("\n🤖 %s wins! Better luck next time! 🤖\n", bot.getName())
 			return
 		}
 
@@ -104,32 +104,4 @@ func RunPvE() {
 	// If we reach here, it's a draw
 	board.Print()
 	fmt.Println("\n🤝 It's a draw! The board is full. 🤝")
-}
-
-// getBotName returns the name of the bot using type assertion
-func getBotName(bot BotInterface) string {
-	switch b := bot.(type) {
-	case *Bot:
-		return b.Name
-	case *MinimaxBot:
-		return b.Name
-	case *ConcurrentMinimaxBot:
-		return b.Name
-	default:
-		return "Unknown Bot"
-	}
-}
-
-// getBotSymbol returns the symbol of the bot using type assertion
-func getBotSymbol(bot BotInterface) byte {
-	switch b := bot.(type) {
-	case *Bot:
-		return b.Symbol
-	case *MinimaxBot:
-		return b.Symbol
-	case *ConcurrentMinimaxBot:
-		return b.Symbol
-	default:
-		return '?'
-	}
 }

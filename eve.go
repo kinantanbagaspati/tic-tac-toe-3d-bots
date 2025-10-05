@@ -60,8 +60,8 @@ func RunEvE() {
 	}
 
 	// Initialize statistics
-	bot1Stats := &BotStats{Name: getBotName(bot1)}
-	bot2Stats := &BotStats{Name: getBotName(bot2)}
+	bot1Stats := &BotStats{Name: bot1.getName()}
+	bot2Stats := &BotStats{Name: bot2.getName()}
 
 	totalMoves := 0
 	maxMoves := board.Length * board.Width * board.Height
