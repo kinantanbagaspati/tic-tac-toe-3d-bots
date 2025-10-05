@@ -8,17 +8,35 @@ import (
 // RunPvE starts a Player vs Environment (Bot) game
 func RunPvE() {
 	board := NewBoard(3) // Using 3x3x3 for testing purposes
-	bot := NewBot('o', "RandomBot")
 	
-	// Alternative bot options (uncomment to use):
-	// bot := NewMinimaxBot('o', "MinimaxBot", 3) // Depth 3 search
+	// Ask user which bot to face
+	fmt.Println("🤖 Player vs Bot Mode")
+	fmt.Println("Choose your opponent:")
+	fmt.Println("1. RandomBot (makes random moves)")
+	fmt.Println("2. MinimaxBot (uses strategy)")
+	fmt.Print("Enter your choice (1-2): ")
+	
+	var botChoice int
+	fmt.Scanln(&botChoice)
+	
+	var bot BotInterface
+	switch botChoice {
+	case 1:
+		bot = NewBot('o', "RandomBot")
+		fmt.Println("You will face RandomBot!")
+	case 2:
+		bot = NewMinimaxBot('o', "MinimaxBot", 3, 3) // Depth 3, Base 3
+		fmt.Println("You will face MinimaxBot!")
+	default:
+		fmt.Println("Invalid choice, defaulting to RandomBot.")
+		bot = NewBot('o', "RandomBot")
+	}
 	
 	totalMoves := 0
 	maxMoves := board.Length * board.Width * board.Height
 	
-	fmt.Println("🤖 Player vs Bot Mode")
-	fmt.Println("Welcome to 3D Tic-Tac-Toe!")
-	fmt.Printf("You are 'x', Bot is '%c'\n", bot.Symbol)
+	fmt.Println("\nWelcome to 3D Tic-Tac-Toe!")
+	fmt.Printf("You are 'x', %s is 'o'\n", getBotName(bot))
 	fmt.Printf("Enter moves in format like A1, B2, etc. (A-%c, 1-%d)\n", 'A'+byte(board.Length-1), board.Width)
 	fmt.Println()
 	
@@ -53,7 +71,7 @@ func RunPvE() {
 		}
 		
 		// Bot's turn
-		fmt.Printf("\n%s is thinking...\n", bot.Name)
+		fmt.Printf("\n%s is thinking...\n", getBotName(bot))
 		time.Sleep(1 * time.Second) // Add some delay for dramatic effect
 		
 		botMove, botCoords := bot.MakeMove(board)
@@ -61,14 +79,14 @@ func RunPvE() {
 			break // No valid moves left
 		}
 		
-		fmt.Printf("%s plays %s at coordinates: (%d, %d, %d)\n", bot.Name, botMove, botCoords[0], botCoords[1], botCoords[2])
+		fmt.Printf("%s plays %s at coordinates: (%d, %d, %d)\n", getBotName(bot), botMove, botCoords[0], botCoords[1], botCoords[2])
 		totalMoves++
 		
 		// Check for bot win
 		winner = board.CheckWin()
-		if winner == bot.Symbol {
+		if winner == getBotSymbol(bot) {
 			board.Print()
-			fmt.Printf("\n🤖 %s wins! Better luck next time! 🤖\n", bot.Name)
+			fmt.Printf("\n🤖 %s wins! Better luck next time! 🤖\n", getBotName(bot))
 			return
 		}
 		
@@ -81,4 +99,28 @@ func RunPvE() {
 	// If we reach here, it's a draw
 	board.Print()
 	fmt.Println("\n🤝 It's a draw! The board is full. 🤝")
+}
+
+// getBotName returns the name of the bot using type assertion
+func getBotName(bot BotInterface) string {
+	switch b := bot.(type) {
+	case *Bot:
+		return b.Name
+	case *MinimaxBot:
+		return b.Name
+	default:
+		return "Unknown Bot"
+	}
+}
+
+// getBotSymbol returns the symbol of the bot using type assertion
+func getBotSymbol(bot BotInterface) byte {
+	switch b := bot.(type) {
+	case *Bot:
+		return b.Symbol
+	case *MinimaxBot:
+		return b.Symbol
+	default:
+		return '?'
+	}
 }
