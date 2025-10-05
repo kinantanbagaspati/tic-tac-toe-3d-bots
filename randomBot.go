@@ -35,14 +35,14 @@ func (bot *Bot) MakeRandomMove(board *Board) (string, [3]int) {
 	if len(validMoves) == 0 {
 		return "", [3]int{-1, -1, -1}
 	}
-	
+
 	// Seed random number generator
 	rand.Seed(time.Now().UnixNano())
-	
+
 	// Pick a random valid move
 	randomIndex := rand.Intn(len(validMoves))
 	chosenMove := validMoves[randomIndex]
-	
+
 	// Make the move
 	coords := board.Move(chosenMove, bot.Symbol)
 	return chosenMove, coords
