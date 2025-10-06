@@ -170,9 +170,9 @@ func createBot(choice int, symbol byte, defaultName string) BotInterface {
 	case 1:
 		return NewBot(symbol, defaultName)
 	case 2:
-		return NewMinimaxBot(symbol, defaultName, 6, 10, 6)
+		return NewMinimaxBot(symbol, defaultName, 6, 10)
 	case 3:
-		return NewConcurrentMinimaxBot(symbol, defaultName, 6, 10, 6)
+		return NewConcurrentMinimaxBot(symbol, defaultName, 6, 10)
 	default:
 		return nil
 	}

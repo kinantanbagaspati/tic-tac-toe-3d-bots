@@ -9,26 +9,16 @@ type ConcurrentMinimaxBot struct {
 	Symbol byte
 	Name   string
 	Depth  int
-	Base   int   // Base for exponential scoring (e.g., 2, 3, 4)
-	Powers []int // Precomputed powers: [base^0, base^1, base^2, ...]
+	Base   int // Base for exponential scoring (e.g., 2, 3, 4)
 }
 
 // NewConcurrentMinimaxBot creates a new concurrent minimax bot with the given symbol, name, and search depth
-func NewConcurrentMinimaxBot(symbol byte, name string, depth int, base int, maxPower int) *ConcurrentMinimaxBot {
-	// Precompute powers up to base^winLength (we need up to winLength powers)
-	// For safety, compute a few extra powers
-	powers := make([]int, maxPower+1)
-	powers[0] = 1 // base^0 = 1
-	for i := 1; i <= maxPower; i++ {
-		powers[i] = powers[i-1] * base // base^i = base^(i-1) * base
-	}
-
+func NewConcurrentMinimaxBot(symbol byte, name string, depth int, base int) *ConcurrentMinimaxBot {
 	return &ConcurrentMinimaxBot{
 		Symbol: symbol,
 		Name:   name,
 		Depth:  depth,
 		Base:   base,
-		Powers: powers,
 	}
 }
 
@@ -45,12 +35,13 @@ func (bot *ConcurrentMinimaxBot) MakeMove(board *Board) (string, [3]int) {
 		return "", [3]int{-1, -1, -1} // No valid moves
 	}
 
-	// Use concurrent minimax to find the best move
-	bestMove := concurrentMinimax(board, bot.Depth, bot.Symbol == 'x', bot.Powers, validMoves)
-	if bestMove == "" {
+	// Use deep concurrent minimax to find the best move
+	_, bestMoves := concurrentMinimaxDeep(board, bot.Depth, bot.Symbol == 'x')
+	if len(bestMoves) == 0 {
 		return "", [3]int{-1, -1, -1} // No valid moves
 	}
 
+	bestMove := bestMoves[0] // Pick the first best move
 	coords := board.Move(bestMove, bot.Symbol)
 	return bestMove, coords
 }
@@ -66,7 +57,7 @@ func (bot *ConcurrentMinimaxBot) getSymbol() byte {
 }
 
 // concurrentMinimax evaluates all possible moves concurrently and returns the best one
-func concurrentMinimax(board *Board, depth int, isMaximizing bool, powers []int, validMoves []string) string {
+func concurrentMinimax(board *Board, depth int, isMaximizing bool, validMoves []string) string {
 	if len(validMoves) == 0 {
 		return ""
 	}
@@ -96,7 +87,7 @@ func concurrentMinimax(board *Board, depth int, isMaximizing bool, powers []int,
 			testBoard.Move(move, symbol)
 
 			// Evaluate this move using sequential minimax from this point
-			score, _ := minimax(testBoard, depth-1, !isMaximizing, powers)
+			score, _ := minimax(testBoard, depth-1, !isMaximizing)
 
 			results <- MoveResult{Move: move, Score: score}
 		}(move)
@@ -130,7 +121,7 @@ func concurrentMinimax(board *Board, depth int, isMaximizing bool, powers []int,
 
 // concurrentMinimaxDeep performs fully concurrent minimax (alternative implementation)
 // This version uses goroutines at every level of the recursion
-func concurrentMinimaxDeep(board *Board, depth int, isMaximizing bool, powers []int) (int, []string) {
+func concurrentMinimaxDeep(board *Board, depth int, isMaximizing bool) (int, []string) {
 	if depth == 0 {
 		return board.Score, []string{} // Use the board's current score
 	}
@@ -142,7 +133,13 @@ func concurrentMinimaxDeep(board *Board, depth int, isMaximizing bool, powers []
 
 	// For small number of moves or shallow depth, use sequential to avoid overhead
 	if len(validMoves) <= 2 || depth <= 1 {
-		return minimax(board, depth, isMaximizing, powers)
+		return minimax(board, depth, isMaximizing)
+	}
+
+	// Set result to very low/high initial value
+	symbol := byte('x')
+	if !isMaximizing {
+		symbol = 'o'
 	}
 
 	// Channel to collect results from goroutines
@@ -155,12 +152,6 @@ func concurrentMinimaxDeep(board *Board, depth int, isMaximizing bool, powers []
 	results := make(chan DepthResult, len(validMoves))
 	var wg sync.WaitGroup
 
-	// Set result to very low/high initial value
-	symbol := byte('x')
-	if !isMaximizing {
-		symbol = 'o'
-	}
-
 	for _, move := range validMoves {
 		wg.Add(1)
 		go func(move string) {
@@ -171,7 +162,7 @@ func concurrentMinimaxDeep(board *Board, depth int, isMaximizing bool, powers []
 			testBoard.Move(move, symbol)
 
 			// Recursively evaluate this branch
-			score, moves := concurrentMinimaxDeep(testBoard, depth-1, !isMaximizing, powers)
+			score, moves := concurrentMinimaxDeep(testBoard, depth-1, !isMaximizing)
 
 			results <- DepthResult{Move: move, Score: score, Moves: moves}
 		}(move)

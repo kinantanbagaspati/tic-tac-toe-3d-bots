@@ -26,10 +26,10 @@ func RunPvE() {
 		bot = NewBot('o', "RandomBot")
 		fmt.Println("You will face RandomBot!")
 	case 2:
-		bot = NewMinimaxBot('o', "MinimaxBot", 6, 10, 6) // Depth 6, Base 10, Max Power 6
+		bot = NewMinimaxBot('o', "MinimaxBot", 6, 10) // Depth 6, Base 10
 		fmt.Println("You will face MinimaxBot!")
 	case 3:
-		bot = NewConcurrentMinimaxBot('o', "ConcurrentMinimaxBot", 6, 10, 6) // Depth 6, Base 10, Max Power 6
+		bot = NewConcurrentMinimaxBot('o', "ConcurrentMinimaxBot", 6, 10) // Depth 6, Base 10
 		fmt.Println("You will face ConcurrentMinimaxBot!")
 	default:
 		fmt.Println("Invalid choice, defaulting to RandomBot.")

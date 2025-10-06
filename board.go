@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+)
 
 // Board represents a 3D Tic-Tac-Toe board
 type Board struct {
@@ -12,7 +15,7 @@ type Board struct {
 	CurrentHeights [][]int // Tracks the current height of each column [length][width]
 	LastMove       [3]int  // Stores the last move coordinates [x, y, z], or [-1, -1, -1] if no moves yet
 	Score          int     // Current board evaluation score (+ favors 'x', - favors 'o')
-	Powers         []int   // Precomputed powers for evaluation [base^0, base^1, base^2, ...]
+	Base           int     // Base for exponential scoring (e.g., 3, 10)
 }
 
 // NewBoard creates a new board with specified dimensions
@@ -40,21 +43,13 @@ func NewBoard(dimensions ...int) *Board {
 		winLength = dimensions[3]
 	}
 
-	// Precompute powers for evaluation
-	maxPower := winLength + 1 // Need extra powers for safety
-	powers := make([]int, maxPower+1)
-	powers[0] = 1 // base^0 = 1
-	for i := 1; i <= maxPower; i++ {
-		powers[i] = powers[i-1] * base // base^i = base^(i-1) * base
-	}
-
 	b := &Board{
 		Length:    length,
 		Width:     width,
 		Height:    height,
 		WinLength: winLength,
 		Score:     0, // Start with neutral score
-		Powers:    powers,
+		Base:      base,
 	}
 	b.Init()
 	return b
@@ -83,6 +78,34 @@ func (b *Board) Init() {
 
 	// Initialize last move to indicate no moves yet
 	b.LastMove = [3]int{-1, -1, -1}
+}
+
+// copyBoard creates a deep copy of the board for testing moves
+func copyBoard(original *Board) *Board {
+	// Create new board with same dimensions and evaluation base
+	newBoard := NewBoard(original.Length, original.Width, original.Height, original.WinLength, original.Base)
+
+	// Copy the grid state
+	for i := 0; i < original.Length; i++ {
+		for j := 0; j < original.Width; j++ {
+			for k := 0; k < original.Height; k++ {
+				newBoard.Grid[i][j][k] = original.Grid[i][j][k]
+			}
+		}
+	}
+
+	// Copy the height tracking
+	for i := 0; i < original.Length; i++ {
+		for j := 0; j < original.Width; j++ {
+			newBoard.CurrentHeights[i][j] = original.CurrentHeights[i][j]
+		}
+	}
+
+	// Copy last move and score
+	newBoard.LastMove = original.LastMove
+	newBoard.Score = original.Score
+
+	return newBoard
 }
 
 // Print displays the board in a 2D projection
@@ -265,10 +288,10 @@ func (b *Board) Evaluate() int {
 					xCount := countBytes(line, 'x')
 					oCount := countBytes(line, 'o')
 
-					if xCount > 0 && oCount == 0 && xCount < len(b.Powers) {
-						score += b.Powers[xCount]
-					} else if oCount > 0 && xCount == 0 && oCount < len(b.Powers) {
-						score -= b.Powers[oCount]
+					if xCount > 0 && oCount == 0 && xCount <= b.WinLength {
+						score += int(math.Pow(float64(b.Base), float64(xCount)))
+					} else if oCount > 0 && xCount == 0 && oCount <= b.WinLength {
+						score -= int(math.Pow(float64(b.Base), float64(oCount)))
 					}
 				}
 			}
@@ -314,10 +337,10 @@ func (b *Board) DeltaEvaluate(x, y, z int, symbol byte) int {
 
 			// Calculate score contribution before the move
 			scoreBefore := 0
-			if xCountBefore > 0 && oCountBefore == 0 && xCountBefore < len(b.Powers) {
-				scoreBefore += b.Powers[xCountBefore]
-			} else if oCountBefore > 0 && xCountBefore == 0 && oCountBefore < len(b.Powers) {
-				scoreBefore -= b.Powers[oCountBefore]
+			if xCountBefore > 0 && oCountBefore == 0 && xCountBefore <= b.WinLength {
+				scoreBefore += int(math.Pow(float64(b.Base), float64(xCountBefore)))
+			} else if oCountBefore > 0 && xCountBefore == 0 && oCountBefore <= b.WinLength {
+				scoreBefore -= int(math.Pow(float64(b.Base), float64(oCountBefore)))
 			}
 
 			// Calculate counts after the move
@@ -332,10 +355,10 @@ func (b *Board) DeltaEvaluate(x, y, z int, symbol byte) int {
 
 			// Calculate score contribution after the move
 			scoreAfter := 0
-			if xCountAfter > 0 && oCountAfter == 0 && xCountAfter < len(b.Powers) {
-				scoreAfter += b.Powers[xCountAfter]
-			} else if oCountAfter > 0 && xCountAfter == 0 && oCountAfter < len(b.Powers) {
-				scoreAfter -= b.Powers[oCountAfter]
+			if xCountAfter > 0 && oCountAfter == 0 && xCountAfter <= b.WinLength {
+				scoreAfter += int(math.Pow(float64(b.Base), float64(xCountAfter)))
+			} else if oCountAfter > 0 && xCountAfter == 0 && oCountAfter <= b.WinLength {
+				scoreAfter -= int(math.Pow(float64(b.Base), float64(oCountAfter)))
 			}
 
 			// Add the delta for this line
