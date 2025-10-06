@@ -53,6 +53,16 @@ func countBytes(bytes []byte, target byte) int {
 
 // Default minimax function, returns pair of (score, array of best moves)
 func minimax(board *Board, depth int, isMaximizing bool) (int, []string) {
+	// Check for winning conditions first
+	winner := board.CheckWin()
+	if winner != '|' {
+		if winner == 'x' {
+			return MAX_INT/2, []string{} // X wins
+		} else {
+			return MIN_INT/2, []string{} // O wins
+		}
+	}
+
 	if depth == 0 {
 		return board.Score, []string{} // Use the board's current score instead of recalculating
 	}

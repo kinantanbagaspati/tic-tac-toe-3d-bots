@@ -16,6 +16,7 @@ type Board struct {
 	LastMove       [3]int  // Stores the last move coordinates [x, y, z], or [-1, -1, -1] if no moves yet
 	Score          int     // Current board evaluation score (+ favors 'x', - favors 'o')
 	Base           int     // Base for exponential scoring (e.g., 3, 10)
+	PlayerWin      byte    // Stores who wins: 'x', 'o', or '|' for no winner
 }
 
 // NewBoard creates a new board with specified dimensions
@@ -78,6 +79,9 @@ func (b *Board) Init() {
 
 	// Initialize last move to indicate no moves yet
 	b.LastMove = [3]int{-1, -1, -1}
+
+	// Initialize player win to no winner
+	b.PlayerWin = '|'
 }
 
 // copyBoard creates a deep copy of the board for testing moves
@@ -101,9 +105,10 @@ func copyBoard(original *Board) *Board {
 		}
 	}
 
-	// Copy last move and score
+	// Copy last move, score, and player win
 	newBoard.LastMove = original.LastMove
 	newBoard.Score = original.Score
+	newBoard.PlayerWin = original.PlayerWin
 
 	return newBoard
 }
@@ -174,8 +179,8 @@ func (b *Board) Move(moveStr string, player byte) [3]int {
 	b.CurrentHeights[col][row]++
 	b.LastMove = [3]int{col, row, currentHeight}
 
-	// Calculate score delta after placing the piece
-	delta := b.DeltaEvaluate(col, row, currentHeight)
+	// Calculate score delta after placing the piece and update win status
+	delta := b.DeltaEvaluate(col, row, currentHeight, true)
 
 	// Update the board's score with the delta
 	b.Score += delta
@@ -201,15 +206,16 @@ func (b *Board) UnMove(moveStr string) [3]int {
 	// Get the height of the topmost piece (0-based)
 	topHeight := currentHeight - 1
 
-	// Calculate the delta before removing the piece
-	delta := b.DeltaEvaluate(col, row, topHeight)
+	// Calculate the delta before removing the piece (don't update win status)
+	delta := b.DeltaEvaluate(col, row, topHeight, false)
 
 	// Remove the piece
 	b.Grid[col][row][topHeight] = '|'
 	b.CurrentHeights[col][row]--
 
-	// Reverse the score delta
+	// Reverse the score delta and reset win status
 	b.Score -= delta
+	b.PlayerWin = '|'
 
 	return [3]int{col, row, topHeight}
 }
@@ -239,49 +245,10 @@ func (b *Board) GetLine(start [3]int, direction [3]int) []byte {
 	return line
 }
 
-// CheckWin checks for a winning condition
+// CheckWin returns the current winner stored in PlayerWin field
 // Returns 'x' if player X wins, 'o' if player O wins, or '|' if no winner
 func (b *Board) CheckWin() byte {
-	directions := [][3]int{
-		{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, // 1D
-		{1, 1, 0}, {1, -1, 0}, {1, 0, 1}, {1, 0, -1}, {0, 1, 1}, {0, 1, -1}, // 2D diagonals
-		{1, 1, 1}, {1, -1, -1}, {1, 1, -1}, {1, -1, 1}, // 3D diagonals
-	}
-
-	xPattern := make([]byte, b.WinLength)
-	oPattern := make([]byte, b.WinLength)
-	for p := 0; p < b.WinLength; p++ {
-		xPattern[p] = 'x'
-		oPattern[p] = 'o'
-	}
-
-	for i := 0; i < b.Length; i++ {
-		for j := 0; j < b.Width; j++ {
-			for k := 0; k < b.Height; k++ {
-				// Check all directions from each cell
-				for _, dir := range directions {
-					if !b.IsValidCoordinate(i+(b.WinLength-1)*dir[0], j+(b.WinLength-1)*dir[1], k+(b.WinLength-1)*dir[2]) {
-						continue
-					}
-					line := b.GetLine([3]int{i, j, k}, dir)
-
-					if string(line) == string(xPattern) {
-						for n := 0; n < b.WinLength; n++ {
-							b.Grid[i+n*dir[0]][j+n*dir[1]][k+n*dir[2]] = 'X'
-						}
-						return 'x'
-					}
-					if string(line) == string(oPattern) {
-						for n := 0; n < b.WinLength; n++ {
-							b.Grid[i+n*dir[0]][j+n*dir[1]][k+n*dir[2]] = 'O'
-						}
-						return 'o'
-					}
-				}
-			}
-		}
-	}
-	return '|'
+	return b.PlayerWin
 }
 
 // GetValidMoves returns a slice of all valid move positions
@@ -341,7 +308,8 @@ func (b *Board) Evaluate() int {
 
 // DeltaEvaluate calculates the change in evaluation score for a piece at the given coordinates
 // The piece must already be placed on the board. This is much more efficient than recalculating the entire board
-func (b *Board) DeltaEvaluate(x, y, z int) int {
+// If updateWin is true, it will check for and update the PlayerWin field when a win is detected
+func (b *Board) DeltaEvaluate(x, y, z int, updateWin bool) int {
 	directions := [][3]int{
 		{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, // 1D
 		{1, 1, 0}, {1, -1, 0}, {1, 0, 1}, {1, 0, -1}, {0, 1, 1}, {0, 1, -1}, // 2D diagonals
@@ -373,6 +341,13 @@ func (b *Board) DeltaEvaluate(x, y, z int) int {
 			lineAfter := b.GetLine([3]int{startX, startY, startZ}, dir)
 			xCountAfter := countBytes(lineAfter, 'x')
 			oCountAfter := countBytes(lineAfter, 'o')
+
+			// Check for winning conditions and update PlayerWin if requested
+			if updateWin && xCountAfter == b.WinLength && oCountAfter == 0 {
+				b.PlayerWin = 'x'
+			} else if updateWin && oCountAfter == b.WinLength && xCountAfter == 0 {
+				b.PlayerWin = 'o'
+			}
 
 			// Calculate score contribution with the piece
 			scoreAfter := 0

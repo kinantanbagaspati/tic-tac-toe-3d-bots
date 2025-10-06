@@ -122,6 +122,16 @@ func concurrentMinimax(board *Board, depth int, isMaximizing bool, validMoves []
 // concurrentMinimaxDeep performs fully concurrent minimax (alternative implementation)
 // This version uses goroutines at every level of the recursion
 func concurrentMinimaxDeep(board *Board, depth int, isMaximizing bool) (int, []string) {
+	// Check for winning conditions first
+	winner := board.CheckWin()
+	if winner != '|' {
+		if winner == 'x' {
+			return MAX_INT/2, []string{} // X wins
+		} else {
+			return MIN_INT/2, []string{} // O wins
+		}
+	}
+
 	if depth == 0 {
 		return board.Score, []string{} // Use the board's current score
 	}
