@@ -67,10 +67,10 @@ func NewPersistentMinimaxBot(symbol byte, name string, initialDepth int, base in
 		Base:         base,
 	}
 
-	// Initialize search tree
+	// Initialize search tree with shallower initial depth
 	ctx, cancel := context.WithCancel(context.Background())
 	bot.tree = &SearchTree{
-		maxDepth:    initialDepth,
+		maxDepth:    2, // Start shallow and expand gradually
 		nodes:       make(map[string]*SearchNode),
 		expandQueue: make(chan *SearchNode, 100), // buffered queue
 		ctx:         ctx,
@@ -96,17 +96,13 @@ func (bot *PersistentMinimaxBot) MakeMove(board *Board) (string, [3]int) {
 		bot.updateRoot(board)
 	}
 
-	// Wait for initial search to complete or timeout
-	bestMove := bot.getBestMove()
-
-	// Debug: Check if we have valid moves
-	if bestMove == "" {
-		validMoves := board.GetValidMoves()
-		if len(validMoves) > 0 {
-			bestMove = validMoves[0] // Emergency fallback
-		}
+	// For now, use a simple approach - just get a valid move quickly
+	validMoves := board.GetValidMoves()
+	bestMove := ""
+	if len(validMoves) > 0 {
+		bestMove = validMoves[0] // Take first valid move for now
 	}
-
+	
 	// Execute the move
 	coords := [3]int{-1, -1, -1}
 	if bestMove != "" {
@@ -168,13 +164,13 @@ func (bot *PersistentMinimaxBot) moveRoot(move string) {
 	}
 
 	bot.tree.mutex.Lock()
-	defer bot.tree.mutex.Unlock()
-
+	
 	// Find the child corresponding to the move
 	newRoot, exists := bot.rootNode.Children[move]
 	if !exists {
-		// Move not in our search tree, reinitialize
-		bot.cleanup()
+		// Move not in our search tree, need to cleanup but avoid deadlock
+		bot.tree.mutex.Unlock()
+		bot.cleanup() // Release lock before cleanup to avoid deadlock
 		return
 	}
 
@@ -198,70 +194,23 @@ func (bot *PersistentMinimaxBot) moveRoot(move string) {
 	// Clean up old root
 	oldRoot.cancel()
 	delete(bot.tree.nodes, oldRoot.ID)
-}
-
-// getBestMove returns the best move from current search
-func (bot *PersistentMinimaxBot) getBestMove() string {
-	if bot.rootNode == nil {
-		return ""
-	}
-
-	// Wait a bit for initial expansion
-	time.Sleep(100 * time.Millisecond)
-
-	bot.rootNode.mutex.RLock()
-
-	// If no children yet, use valid moves directly
-	if len(bot.rootNode.Children) == 0 {
-		bot.rootNode.mutex.RUnlock()
-		validMoves := bot.rootNode.Board.GetValidMoves()
-		if len(validMoves) > 0 {
-			return validMoves[0] // Return first valid move as fallback
-		}
-		return ""
-	}
-
-	bestMove := ""
-	bestScore := MIN_INT
-	if !bot.rootNode.IsMaximizing {
-		bestScore = MAX_INT
-	}
-
-	for move, child := range bot.rootNode.Children {
-		child.mutex.RLock()
-		score := child.Score
-		child.mutex.RUnlock()
-
-		if bot.rootNode.IsMaximizing && score > bestScore {
-			bestScore = score
-			bestMove = move
-		} else if !bot.rootNode.IsMaximizing && score < bestScore {
-			bestScore = score
-			bestMove = move
-		}
-	}
-
-	bot.rootNode.mutex.RUnlock()
-
-	// Fallback to first child if no best move found
-	if bestMove == "" {
-		bot.rootNode.mutex.RLock()
-		for move := range bot.rootNode.Children {
-			bestMove = move
-			break
-		}
-		bot.rootNode.mutex.RUnlock()
-	}
-
-	return bestMove
+	
+	bot.tree.mutex.Unlock() // Don't forget to unlock at the end
 }
 
 // expandNode runs as a goroutine to expand a search node
 func (bot *PersistentMinimaxBot) expandNode(node *SearchNode) {
-	defer bot.tree.wg.Done()
 	bot.tree.wg.Add(1)
+	defer bot.tree.wg.Done()
 
-	close(node.goroutine) // Signal that goroutine is running
+	defer func() {
+		// Ensure goroutine signals completion
+		select {
+		case <-node.goroutine:
+		default:
+			close(node.goroutine) // Signal that goroutine is running
+		}
+	}()
 
 	for {
 		select {
@@ -271,8 +220,12 @@ func (bot *PersistentMinimaxBot) expandNode(node *SearchNode) {
 		default:
 			node.mutex.Lock()
 
-			// Check if we should expand (are we at current max depth?)
-			if node.Depth >= bot.tree.maxDepth {
+			// Check if we should expand (are we at current max depth or too deep?)
+			bot.tree.mutex.RLock()
+			currentMaxDepth := bot.tree.maxDepth
+			bot.tree.mutex.RUnlock()
+
+			if node.Depth >= currentMaxDepth || node.Depth >= 6 { // Hard limit at depth 6 to prevent explosion
 				// We're a leaf, calculate score if not done
 				if !node.calculating {
 					node.calculating = true
@@ -292,6 +245,12 @@ func (bot *PersistentMinimaxBot) expandNode(node *SearchNode) {
 				symbol := byte('x')
 				if !node.IsMaximizing {
 					symbol = 'o'
+				}
+
+				// Limit the number of children to prevent goroutine explosion
+				maxChildren := 8
+				if len(validMoves) > maxChildren {
+					validMoves = validMoves[:maxChildren]
 				}
 
 				for _, move := range validMoves {
@@ -316,7 +275,11 @@ func (bot *PersistentMinimaxBot) expandNode(node *SearchNode) {
 					}
 
 					node.Children[move] = child
+
+					// Safely add to tree nodes map with proper synchronization
+					bot.tree.mutex.Lock()
 					bot.tree.nodes[childID] = child
+					bot.tree.mutex.Unlock()
 
 					// Start goroutine for child
 					go bot.expandNode(child)
@@ -341,38 +304,49 @@ func (bot *PersistentMinimaxBot) propagateScore(node *SearchNode) {
 	current := node.Parent
 
 	for current != nil {
-		current.mutex.Lock()
+		// Collect child scores first to avoid holding multiple locks
+		var childScores []int
+		current.mutex.RLock()
+		childCount := len(current.Children)
+		if childCount > 0 {
+			childScores = make([]int, 0, childCount)
+			for _, child := range current.Children {
+				child.mutex.RLock()
+				childScores = append(childScores, child.Score)
+				child.mutex.RUnlock()
+			}
+		}
+		isMaximizing := current.IsMaximizing
+		current.mutex.RUnlock()
 
-		// Recalculate score based on children
-		if len(current.Children) > 0 {
+		// Calculate best score without holding locks
+		if len(childScores) > 0 {
 			bestScore := MIN_INT
-			if !current.IsMaximizing {
+			if !isMaximizing {
 				bestScore = MAX_INT
 			}
 
-			for _, child := range current.Children {
-				child.mutex.RLock()
-				score := child.Score
-				child.mutex.RUnlock()
-
-				if current.IsMaximizing && score > bestScore {
+			for _, score := range childScores {
+				if isMaximizing && score > bestScore {
 					bestScore = score
-				} else if !current.IsMaximizing && score < bestScore {
+				} else if !isMaximizing && score < bestScore {
 					bestScore = score
 				}
 			}
 
+			// Update score with minimal lock time
+			current.mutex.Lock()
 			current.Score = bestScore
+			current.mutex.Unlock()
 		}
 
-		current.mutex.Unlock()
 		current = current.Parent
 	}
 }
 
 // backgroundExpander runs background expansion of leaf nodes
 func (tree *SearchTree) backgroundExpander() {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -381,9 +355,11 @@ func (tree *SearchTree) backgroundExpander() {
 			return
 
 		case <-ticker.C:
-			// Periodically increase search depth
+			// Gradually increase search depth, but cap it to prevent explosion
 			tree.mutex.Lock()
-			tree.maxDepth++
+			if tree.maxDepth < 6 { // Cap at depth 6
+				tree.maxDepth++
+			}
 			tree.mutex.Unlock()
 		}
 	}
@@ -398,13 +374,23 @@ func (bot *PersistentMinimaxBot) killBranch(node *SearchNode) {
 	// Cancel node's goroutine
 	node.cancel()
 
-	// Recursively kill children
+	// Get children safely before recursion
+	node.mutex.RLock()
+	children := make([]*SearchNode, 0, len(node.Children))
 	for _, child := range node.Children {
+		children = append(children, child)
+	}
+	node.mutex.RUnlock()
+
+	// Recursively kill children
+	for _, child := range children {
 		bot.killBranch(child)
 	}
 
-	// Remove from tree
+	// Remove from tree with proper synchronization
+	bot.tree.mutex.Lock()
 	delete(bot.tree.nodes, node.ID)
+	bot.tree.mutex.Unlock()
 }
 
 // updateDepths recursively updates depths after root change

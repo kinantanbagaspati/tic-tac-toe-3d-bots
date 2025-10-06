@@ -16,7 +16,7 @@ func RunEvEStream() {
 	fmt.Println()
 
 	// Create a new board
-	board := NewBoard()
+	board := NewBoard(3)
 
 	// Create two persistent minimax bots
 	botX := NewPersistentMinimaxBot('x', "PersistentBot-X", 4, 10)
