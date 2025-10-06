@@ -15,9 +15,10 @@ func RunPvE() {
 	fmt.Println("1. RandomBot (makes random moves)")
 	fmt.Println("2. NaiveMinimaxBot (basic minimax without optimizations)")
 	fmt.Println("3. MinimaxBot (optimized minimax with delta evaluation)")
-	fmt.Println("4. ConcurrentMinimaxBot (concurrent at top level)")
-	fmt.Println("5. ConcurrentMinimaxDeepBot (concurrent at all levels)")
-	fmt.Print("Enter your choice (1-5): ")
+	fmt.Println("4. AlphaBetaMinimaxBot (minimax with alpha-beta pruning)")
+	fmt.Println("5. ConcurrentMinimaxBot (concurrent at top level)")
+	fmt.Println("6. ConcurrentMinimaxDeepBot (concurrent at all levels)")
+	fmt.Print("Enter your choice (1-6): ")
 
 	var botChoice int
 	fmt.Scanln(&botChoice)
@@ -34,9 +35,12 @@ func RunPvE() {
 		bot = NewMinimaxBot('o', "MinimaxBot", 6, 10) // Depth 6, Base 10
 		fmt.Println("You will face MinimaxBot!")
 	case 4:
+		bot = NewAlphaBetaMinimaxBot('o', "AlphaBetaMinimaxBot", 7, 10) // Higher depth due to pruning efficiency
+		fmt.Println("You will face AlphaBetaMinimaxBot!")
+	case 5:
 		bot = NewConcurrentMinimaxBot('o', "ConcurrentMinimaxBot", 6, 10) // Depth 6, Base 10
 		fmt.Println("You will face ConcurrentMinimaxBot!")
-	case 5:
+	case 6:
 		bot = NewConcurrentMinimaxDeepBot('o', "ConcurrentMinimaxDeepBot", 5, 10) // Lower depth due to overhead
 		fmt.Println("You will face ConcurrentMinimaxDeepBot!")
 	default:

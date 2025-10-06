@@ -32,9 +32,10 @@ func RunEvE() {
 	fmt.Println("1. RandomBot (makes random moves)")
 	fmt.Println("2. NaiveMinimaxBot (basic minimax without optimizations)")
 	fmt.Println("3. MinimaxBot (optimized minimax with delta evaluation)")
-	fmt.Println("4. ConcurrentMinimaxBot (concurrent at top level)")
-	fmt.Println("5. ConcurrentMinimaxDeepBot (concurrent at all levels)")
-	fmt.Print("Enter your choice (1-5): ")
+	fmt.Println("4. AlphaBetaMinimaxBot (minimax with alpha-beta pruning)")
+	fmt.Println("5. ConcurrentMinimaxBot (concurrent at top level)")
+	fmt.Println("6. ConcurrentMinimaxDeepBot (concurrent at all levels)")
+	fmt.Print("Enter your choice (1-6): ")
 
 	var bot1Choice int
 	fmt.Scanln(&bot1Choice)
@@ -50,9 +51,10 @@ func RunEvE() {
 	fmt.Println("1. RandomBot (makes random moves)")
 	fmt.Println("2. NaiveMinimaxBot (basic minimax without optimizations)")
 	fmt.Println("3. MinimaxBot (optimized minimax with delta evaluation)")
-	fmt.Println("4. ConcurrentMinimaxBot (concurrent at top level)")
-	fmt.Println("5. ConcurrentMinimaxDeepBot (concurrent at all levels)")
-	fmt.Print("Enter your choice (1-5): ")
+	fmt.Println("4. AlphaBetaMinimaxBot (minimax with alpha-beta pruning)")
+	fmt.Println("5. ConcurrentMinimaxBot (concurrent at top level)")
+	fmt.Println("6. ConcurrentMinimaxDeepBot (concurrent at all levels)")
+	fmt.Print("Enter your choice (1-6): ")
 
 	var bot2Choice int
 	fmt.Scanln(&bot2Choice)
@@ -178,9 +180,11 @@ func createBot(choice int, symbol byte, defaultName string) BotInterface {
 	case 3:
 		return NewMinimaxBot(symbol, defaultName, 6, 10)
 	case 4:
-		return NewConcurrentMinimaxBot(symbol, defaultName, 6, 10)
+		return NewAlphaBetaMinimaxBot(symbol, defaultName, 7, 10) // Higher depth due to pruning efficiency
 	case 5:
-		return NewConcurrentMinimaxDeepBot(symbol, defaultName, 6, 10) // Lower depth due to overhead
+		return NewConcurrentMinimaxBot(symbol, defaultName, 6, 10)
+	case 6:
+		return NewConcurrentMinimaxDeepBot(symbol, defaultName, 5, 10) // Lower depth due to overhead
 	default:
 		return nil
 	}
