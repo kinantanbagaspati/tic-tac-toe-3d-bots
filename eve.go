@@ -30,9 +30,11 @@ func RunEvE() {
 	// Select first bot (X player)
 	fmt.Println("\nSelect Bot 1 (plays 'x'):")
 	fmt.Println("1. RandomBot (makes random moves)")
-	fmt.Println("2. MinimaxBot (uses strategy)")
-	fmt.Println("3. ConcurrentMinimaxBot (uses concurrent strategy)")
-	fmt.Print("Enter your choice (1-3): ")
+	fmt.Println("2. NaiveMinimaxBot (basic minimax without optimizations)")
+	fmt.Println("3. MinimaxBot (optimized minimax with delta evaluation)")
+	fmt.Println("4. ConcurrentMinimaxBot (concurrent at top level)")
+	fmt.Println("5. ConcurrentMinimaxDeepBot (concurrent at all levels)")
+	fmt.Print("Enter your choice (1-5): ")
 
 	var bot1Choice int
 	fmt.Scanln(&bot1Choice)
@@ -46,9 +48,11 @@ func RunEvE() {
 	// Select second bot (O player)
 	fmt.Println("\nSelect Bot 2 (plays 'o'):")
 	fmt.Println("1. RandomBot (makes random moves)")
-	fmt.Println("2. MinimaxBot (uses strategy)")
-	fmt.Println("3. ConcurrentMinimaxBot (uses concurrent strategy)")
-	fmt.Print("Enter your choice (1-3): ")
+	fmt.Println("2. NaiveMinimaxBot (basic minimax without optimizations)")
+	fmt.Println("3. MinimaxBot (optimized minimax with delta evaluation)")
+	fmt.Println("4. ConcurrentMinimaxBot (concurrent at top level)")
+	fmt.Println("5. ConcurrentMinimaxDeepBot (concurrent at all levels)")
+	fmt.Print("Enter your choice (1-5): ")
 
 	var bot2Choice int
 	fmt.Scanln(&bot2Choice)
@@ -170,9 +174,13 @@ func createBot(choice int, symbol byte, defaultName string) BotInterface {
 	case 1:
 		return NewBot(symbol, defaultName)
 	case 2:
-		return NewMinimaxBot(symbol, defaultName, 6, 10)
+		return NewNaiveMinimaxBot(symbol, defaultName, 4, 10) // Lower depth for naive approach
 	case 3:
+		return NewMinimaxBot(symbol, defaultName, 6, 10)
+	case 4:
 		return NewConcurrentMinimaxBot(symbol, defaultName, 6, 10)
+	case 5:
+		return NewConcurrentMinimaxDeepBot(symbol, defaultName, 6, 10) // Lower depth due to overhead
 	default:
 		return nil
 	}

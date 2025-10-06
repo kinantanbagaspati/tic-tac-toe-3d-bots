@@ -1,16 +1,16 @@
 package main
 
-// MinimaxBot represents an optimized minimax AI player with move/unmove and delta evaluation
-type MinimaxBot struct {
+// NaiveMinimaxBot represents a simple minimax AI player without optimizations
+type NaiveMinimaxBot struct {
 	Symbol byte
 	Name   string
 	Depth  int
 	Base   int // Base for exponential scoring (e.g., 2, 3, 4)
 }
 
-// NewMinimaxBot creates a new minimax bot with the given symbol, name, and search depth
-func NewMinimaxBot(symbol byte, name string, depth int, base int) *MinimaxBot {
-	return &MinimaxBot{
+// NewNaiveMinimaxBot creates a new naive minimax bot with the given symbol, name, and search depth
+func NewNaiveMinimaxBot(symbol byte, name string, depth int, base int) *NaiveMinimaxBot {
+	return &NaiveMinimaxBot{
 		Symbol: symbol,
 		Name:   name,
 		Depth:  depth,
@@ -18,10 +18,10 @@ func NewMinimaxBot(symbol byte, name string, depth int, base int) *MinimaxBot {
 	}
 }
 
-// MakeMove makes a move using optimized minimax algorithm (implements BotInterface)
-// Uses delta evaluation and move/unmove optimization for better performance
-func (bot *MinimaxBot) MakeMove(board *Board) (string, [3]int) {
-	_, bestMoves := minimax(board, bot.Depth, bot.Symbol == 'x')
+// MakeMove makes a move using naive minimax algorithm (implements BotInterface)
+// Uses full board evaluation at each step - no delta evaluation optimization
+func (bot *NaiveMinimaxBot) MakeMove(board *Board) (string, [3]int) {
+	_, bestMoves := naiveMinimax(board, bot.Depth, bot.Symbol == 'x')
 	if len(bestMoves) == 0 {
 		return "", [3]int{-1, -1, -1} // No valid moves
 	}
@@ -31,28 +31,17 @@ func (bot *MinimaxBot) MakeMove(board *Board) (string, [3]int) {
 }
 
 // getName returns the bot's name (implements BotInterface)
-func (bot *MinimaxBot) getName() string {
+func (bot *NaiveMinimaxBot) getName() string {
 	return bot.Name
 }
 
 // getSymbol returns the bot's symbol (implements BotInterface)
-func (bot *MinimaxBot) getSymbol() byte {
+func (bot *NaiveMinimaxBot) getSymbol() byte {
 	return bot.Symbol
 }
 
-// countBytes counts how many times target appears in the byte slice
-func countBytes(bytes []byte, target byte) int {
-	count := 0
-	for _, b := range bytes {
-		if b == target {
-			count++
-		}
-	}
-	return count
-}
-
-// Default minimax function, returns pair of (score, array of best moves)
-func minimax(board *Board, depth int, isMaximizing bool) (int, []string) {
+// naiveMinimax function uses full board evaluation instead of delta evaluation
+func naiveMinimax(board *Board, depth int, isMaximizing bool) (int, []string) {
 	// Check for winning conditions first
 	winner := board.CheckWin()
 	if winner != '|' {
@@ -64,7 +53,8 @@ func minimax(board *Board, depth int, isMaximizing bool) (int, []string) {
 	}
 
 	if depth == 0 {
-		return board.Score, []string{} // Use the board's current score instead of recalculating
+		// Use full evaluation instead of cached score
+		return board.Evaluate(), []string{}
 	}
 
 	// Set result to very low/high initial value
@@ -77,9 +67,11 @@ func minimax(board *Board, depth int, isMaximizing bool) (int, []string) {
 	bestMoves := []string{}
 
 	for _, move := range board.GetValidMoves() {
-		board.Move(move, symbol)
-		score, moves := minimax(board, depth-1, !isMaximizing)
-		board.UnMove(move)
+		// Create a deep copy for naive approach (no move/unmove optimization)
+		testBoard := copyBoard(board)
+		testBoard.Move(move, symbol)
+
+		score, moves := naiveMinimax(testBoard, depth-1, !isMaximizing)
 
 		if isMaximizing && score > bestScore {
 			bestScore = score

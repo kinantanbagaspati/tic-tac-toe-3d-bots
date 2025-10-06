@@ -13,9 +13,11 @@ func RunPvE() {
 	fmt.Println("🤖 Player vs Bot Mode")
 	fmt.Println("Choose your opponent:")
 	fmt.Println("1. RandomBot (makes random moves)")
-	fmt.Println("2. MinimaxBot (uses strategy)")
-	fmt.Println("3. ConcurrentMinimaxBot (uses concurrent strategy)")
-	fmt.Print("Enter your choice (1-3): ")
+	fmt.Println("2. NaiveMinimaxBot (basic minimax without optimizations)")
+	fmt.Println("3. MinimaxBot (optimized minimax with delta evaluation)")
+	fmt.Println("4. ConcurrentMinimaxBot (concurrent at top level)")
+	fmt.Println("5. ConcurrentMinimaxDeepBot (concurrent at all levels)")
+	fmt.Print("Enter your choice (1-5): ")
 
 	var botChoice int
 	fmt.Scanln(&botChoice)
@@ -26,11 +28,17 @@ func RunPvE() {
 		bot = NewBot('o', "RandomBot")
 		fmt.Println("You will face RandomBot!")
 	case 2:
+		bot = NewNaiveMinimaxBot('o', "NaiveMinimaxBot", 4, 10) // Lower depth for naive approach
+		fmt.Println("You will face NaiveMinimaxBot!")
+	case 3:
 		bot = NewMinimaxBot('o', "MinimaxBot", 6, 10) // Depth 6, Base 10
 		fmt.Println("You will face MinimaxBot!")
-	case 3:
+	case 4:
 		bot = NewConcurrentMinimaxBot('o', "ConcurrentMinimaxBot", 6, 10) // Depth 6, Base 10
 		fmt.Println("You will face ConcurrentMinimaxBot!")
+	case 5:
+		bot = NewConcurrentMinimaxDeepBot('o', "ConcurrentMinimaxDeepBot", 5, 10) // Lower depth due to overhead
+		fmt.Println("You will face ConcurrentMinimaxDeepBot!")
 	default:
 		fmt.Println("Invalid choice, defaulting to RandomBot.")
 		bot = NewBot('o', "RandomBot")
