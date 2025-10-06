@@ -35,7 +35,8 @@ func RunEvE() {
 	fmt.Println("4. AlphaBetaMinimaxBot (minimax with alpha-beta pruning)")
 	fmt.Println("5. ConcurrentMinimaxBot (concurrent at top level)")
 	fmt.Println("6. ConcurrentMinimaxDeepBot (concurrent at all levels)")
-	fmt.Print("Enter your choice (1-6): ")
+	fmt.Println("7. ConcurrentAlphaBetaMinimaxBot (concurrent alpha-beta pruning)")
+	fmt.Print("Enter your choice (1-7): ")
 
 	var bot1Choice int
 	fmt.Scanln(&bot1Choice)
@@ -54,7 +55,8 @@ func RunEvE() {
 	fmt.Println("4. AlphaBetaMinimaxBot (minimax with alpha-beta pruning)")
 	fmt.Println("5. ConcurrentMinimaxBot (concurrent at top level)")
 	fmt.Println("6. ConcurrentMinimaxDeepBot (concurrent at all levels)")
-	fmt.Print("Enter your choice (1-6): ")
+	fmt.Println("7. ConcurrentAlphaBetaMinimaxBot (concurrent alpha-beta pruning)")
+	fmt.Print("Enter your choice (1-7): ")
 
 	var bot2Choice int
 	fmt.Scanln(&bot2Choice)
@@ -185,6 +187,8 @@ func createBot(choice int, symbol byte, defaultName string) BotInterface {
 		return NewConcurrentMinimaxBot(symbol, defaultName, 6, 10)
 	case 6:
 		return NewConcurrentMinimaxDeepBot(symbol, defaultName, 5, 10) // Lower depth due to overhead
+	case 7:
+		return NewConcurrentAlphaBetaMinimaxBot(symbol, defaultName, 6, 10) // Concurrent alpha-beta pruning
 	default:
 		return nil
 	}
