@@ -10,11 +10,12 @@ func main() {
 	fmt.Println("1. Player vs Player (PvP)")
 	fmt.Println("2. Player vs Bot (PvE)")
 	fmt.Println("3. Bot vs Bot (Eve)")
-	fmt.Println("4. Exit")
+	fmt.Println("4. PvE Stream (Multi-Depth Analysis)")
+	fmt.Println("5. Exit")
 	fmt.Println()
 
 	var choice int
-	fmt.Print("Enter your choice (1-4): ")
+	fmt.Print("Enter your choice (1-5): ")
 	fmt.Scanln(&choice)
 
 	switch choice {
@@ -25,8 +26,10 @@ func main() {
 	case 3:
 		RunEvE()
 	case 4:
+		RunPvEStream()
+	case 5:
 		fmt.Println("Thanks for playing! Goodbye! 👋")
 	default:
-		fmt.Println("Invalid choice. Please run the program again and select 1, 2, 3, or 4.")
+		fmt.Println("Invalid choice. Please run the program again and select 1, 2, 3, 4, or 5.")
 	}
 }
