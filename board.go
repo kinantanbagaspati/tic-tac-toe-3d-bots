@@ -11,22 +11,25 @@ type Board struct {
 	Grid           [][][]byte
 	CurrentHeights [][]int // Tracks the current height of each column [length][width]
 	LastMove       [3]int  // Stores the last move coordinates [x, y, z], or [-1, -1, -1] if no moves yet
+	Score          int     // Current board evaluation score (+ favors 'x', - favors 'o')
+	Powers         []int   // Precomputed powers for evaluation [base^0, base^1, base^2, ...]
 }
 
 // NewBoard creates a new board with specified dimensions
 // If no arguments provided, uses default dimensions (4x4x4, win=4)
-// Usage: 
-//   NewBoard() - creates 4x4x4 board with win=4
-//   NewBoard(3) - creates 3x3x3 board with win=3
-//   NewBoard(3, 3, 3, 3) - creates 3x3x3 board with win=3
+// Usage:
+//
+//	NewBoard() - creates 4x4x4 board with win=4
+//	NewBoard(3) - creates 3x3x3 board with win=3
+//	NewBoard(3, 3, 3, 3) - creates 3x3x3 board with win=3
 func NewBoard(dimensions ...int) *Board {
 	// Default values
-	length, width, height, winLength := 4, 4, 4, 4
-	
+	length, width, height, winLength, base := 4, 4, 4, 4, 10
+
 	// Override with provided values
 	if len(dimensions) >= 1 {
 		length = dimensions[0]
-		width = dimensions[0]   // If only one dimension provided, use it for all
+		width = dimensions[0] // If only one dimension provided, use it for all
 		height = dimensions[0]
 		winLength = dimensions[0]
 	}
@@ -36,12 +39,22 @@ func NewBoard(dimensions ...int) *Board {
 		height = dimensions[2]
 		winLength = dimensions[3]
 	}
-	
+
+	// Precompute powers for evaluation
+	maxPower := winLength + 1 // Need extra powers for safety
+	powers := make([]int, maxPower+1)
+	powers[0] = 1 // base^0 = 1
+	for i := 1; i <= maxPower; i++ {
+		powers[i] = powers[i-1] * base // base^i = base^(i-1) * base
+	}
+
 	b := &Board{
 		Length:    length,
 		Width:     width,
 		Height:    height,
 		WinLength: winLength,
+		Score:     0, // Start with neutral score
+		Powers:    powers,
 	}
 	b.Init()
 	return b
@@ -60,14 +73,14 @@ func (b *Board) Init() {
 			}
 		}
 	}
-	
+
 	// Initialize the height tracking array
 	b.CurrentHeights = make([][]int, b.Length)
 	for i := 0; i < b.Length; i++ {
 		b.CurrentHeights[i] = make([]int, b.Width)
 		// Heights start at 0 (all columns are empty)
 	}
-	
+
 	// Initialize last move to indicate no moves yet
 	b.LastMove = [3]int{-1, -1, -1}
 }
@@ -101,13 +114,13 @@ func (b *Board) Move(moveStr string, player byte) [3]int {
 	if len(moveStr) < 2 {
 		return [3]int{-1, -1, -1}
 	}
-	
+
 	// Get column
 	col := int(moveStr[0]) - int('A')
 	if col < 0 || col >= b.Length {
 		return [3]int{-1, -1, -1}
 	}
-	
+
 	// Get row
 	row := 0
 	for i := 1; i < len(moveStr); i++ {
@@ -120,16 +133,24 @@ func (b *Board) Move(moveStr string, player byte) [3]int {
 	if row < 0 || row >= b.Width {
 		return [3]int{-1, -1, -1}
 	}
-	
+
 	// Try placing the block
 	currentHeight := b.CurrentHeights[col][row]
 	if currentHeight >= b.Height {
 		return [3]int{-1, -1, -1}
 	}
+
+	// Calculate score delta before placing the piece
+	delta := b.DeltaEvaluate(col, row, currentHeight, player)
+
+	// Place the piece
 	b.Grid[col][row][currentHeight] = player
 	b.CurrentHeights[col][row]++
 	b.LastMove = [3]int{col, row, currentHeight}
-	
+
+	// Update the board's score with the delta
+	b.Score += delta
+
 	return b.LastMove
 }
 
@@ -166,14 +187,14 @@ func (b *Board) CheckWin() byte {
 		{1, 1, 0}, {1, -1, 0}, {1, 0, 1}, {1, 0, -1}, {0, 1, 1}, {0, 1, -1}, // 2D diagonals
 		{1, 1, 1}, {1, -1, -1}, {1, 1, -1}, {1, -1, 1}, // 3D diagonals
 	}
-	
+
 	xPattern := make([]byte, b.WinLength)
 	oPattern := make([]byte, b.WinLength)
 	for p := 0; p < b.WinLength; p++ {
 		xPattern[p] = 'x'
 		oPattern[p] = 'o'
 	}
-	
+
 	for i := 0; i < b.Length; i++ {
 		for j := 0; j < b.Width; j++ {
 			for k := 0; k < b.Height; k++ {
@@ -183,7 +204,7 @@ func (b *Board) CheckWin() byte {
 						continue
 					}
 					line := b.GetLine([3]int{i, j, k}, dir)
-					
+
 					if string(line) == string(xPattern) {
 						for n := 0; n < b.WinLength; n++ {
 							b.Grid[i+n*dir[0]][j+n*dir[1]][k+n*dir[2]] = 'X'
@@ -220,4 +241,107 @@ func (b *Board) GetValidMoves() []string {
 // IsFull checks if the board is completely filled
 func (b *Board) IsFull() bool {
 	return len(b.GetValidMoves()) == 0
+}
+
+// Evaluate calculates the full board evaluation score
+// + is good for 'x', - is good for 'o'
+func (b *Board) Evaluate() int {
+	directions := [][3]int{
+		{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, // 1D
+		{1, 1, 0}, {1, -1, 0}, {1, 0, 1}, {1, 0, -1}, {0, 1, 1}, {0, 1, -1}, // 2D diagonals
+		{1, 1, 1}, {1, -1, -1}, {1, 1, -1}, {1, -1, 1}, // 3D diagonals
+	}
+	score := 0
+
+	for i := 0; i < b.Length; i++ {
+		for j := 0; j < b.Width; j++ {
+			for k := 0; k < b.Height; k++ {
+				// Check all directions from each cell
+				for _, dir := range directions {
+					if !b.IsValidCoordinate(i+(b.WinLength-1)*dir[0], j+(b.WinLength-1)*dir[1], k+(b.WinLength-1)*dir[2]) {
+						continue
+					}
+					line := b.GetLine([3]int{i, j, k}, dir)
+					xCount := countBytes(line, 'x')
+					oCount := countBytes(line, 'o')
+
+					if xCount > 0 && oCount == 0 && xCount < len(b.Powers) {
+						score += b.Powers[xCount]
+					} else if oCount > 0 && xCount == 0 && oCount < len(b.Powers) {
+						score -= b.Powers[oCount]
+					}
+				}
+			}
+		}
+	}
+
+	b.Score = score // Update the board's score
+	return score
+}
+
+// DeltaEvaluate calculates the change in evaluation score when placing a piece at the given coordinates
+// This is much more efficient than recalculating the entire board
+func (b *Board) DeltaEvaluate(x, y, z int, symbol byte) int {
+	directions := [][3]int{
+		{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, // 1D
+		{1, 1, 0}, {1, -1, 0}, {1, 0, 1}, {1, 0, -1}, {0, 1, 1}, {0, 1, -1}, // 2D diagonals
+		{1, 1, 1}, {1, -1, -1}, {1, 1, -1}, {1, -1, 1}, // 3D diagonals
+	}
+
+	delta := 0
+
+	// For each direction, check all lines that pass through this position
+	for _, dir := range directions {
+		// Check lines in both directions from this point
+		for offset := -(b.WinLength - 1); offset <= 0; offset++ {
+			startX := x + offset*dir[0]
+			startY := y + offset*dir[1]
+			startZ := z + offset*dir[2]
+
+			endX := startX + (b.WinLength-1)*dir[0]
+			endY := startY + (b.WinLength-1)*dir[1]
+			endZ := startZ + (b.WinLength-1)*dir[2]
+
+			// Check if this line segment is valid
+			if !b.IsValidCoordinate(startX, startY, startZ) || !b.IsValidCoordinate(endX, endY, endZ) {
+				continue
+			}
+
+			// Get the line before the move
+			lineBefor := b.GetLine([3]int{startX, startY, startZ}, dir)
+			xCountBefore := countBytes(lineBefor, 'x')
+			oCountBefore := countBytes(lineBefor, 'o')
+
+			// Calculate score contribution before the move
+			scoreBefore := 0
+			if xCountBefore > 0 && oCountBefore == 0 && xCountBefore < len(b.Powers) {
+				scoreBefore += b.Powers[xCountBefore]
+			} else if oCountBefore > 0 && xCountBefore == 0 && oCountBefore < len(b.Powers) {
+				scoreBefore -= b.Powers[oCountBefore]
+			}
+
+			// Calculate counts after the move
+			var xCountAfter, oCountAfter int
+			if symbol == 'x' {
+				xCountAfter = xCountBefore + 1
+				oCountAfter = oCountBefore
+			} else {
+				xCountAfter = xCountBefore
+				oCountAfter = oCountBefore + 1
+			}
+
+			// Calculate score contribution after the move
+			scoreAfter := 0
+			if xCountAfter > 0 && oCountAfter == 0 && xCountAfter < len(b.Powers) {
+				scoreAfter += b.Powers[xCountAfter]
+			} else if oCountAfter > 0 && xCountAfter == 0 && oCountAfter < len(b.Powers) {
+				scoreAfter -= b.Powers[oCountAfter]
+			}
+
+			// Add the delta for this line
+			delta += scoreAfter - scoreBefore
+		}
+	}
+
+	return delta
 }

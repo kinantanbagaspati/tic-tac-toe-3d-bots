@@ -52,7 +52,7 @@ func (bot *MinimaxBot) getSymbol() byte {
 
 // copyBoard creates a deep copy of the board for testing moves
 func copyBoard(original *Board) *Board {
-	// Create new board with same dimensions
+	// Create new board with same dimensions and evaluation base
 	newBoard := NewBoard(original.Length, original.Width, original.Height, original.WinLength)
 
 	// Copy the grid state
@@ -71,8 +71,9 @@ func copyBoard(original *Board) *Board {
 		}
 	}
 
-	// Copy last move
+	// Copy last move and score
 	newBoard.LastMove = original.LastMove
+	newBoard.Score = original.Score
 
 	return newBoard
 }
@@ -88,43 +89,10 @@ func countBytes(bytes []byte, target byte) int {
 	return count
 }
 
-func EvalExpo(board *Board, powers []int) int {
-	// + is good for 'x', - is good for 'o'
-	directions := [][3]int{
-		{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, // 1D
-		{1, 1, 0}, {1, -1, 0}, {1, 0, 1}, {1, 0, -1}, {0, 1, 1}, {0, 1, -1}, // 2D diagonals
-		{1, 1, 1}, {1, -1, -1}, {1, 1, -1}, {1, -1, 1}, // 3D diagonals
-	}
-	score := 0
-
-	for i := 0; i < board.Length; i++ {
-		for j := 0; j < board.Width; j++ {
-			for k := 0; k < board.Height; k++ {
-				// Check all directions from each cell
-				for _, dir := range directions {
-					if !board.IsValidCoordinate(i+(board.WinLength-1)*dir[0], j+(board.WinLength-1)*dir[1], k+(board.WinLength-1)*dir[2]) {
-						continue
-					}
-					line := board.GetLine([3]int{i, j, k}, dir)
-					xCount := countBytes(line, 'x')
-					oCount := countBytes(line, 'o')
-
-					if xCount > 0 && oCount == 0 && xCount < len(powers) {
-						score += powers[xCount]
-					} else if oCount > 0 && xCount == 0 && oCount < len(powers) {
-						score -= powers[oCount]
-					}
-				}
-			}
-		}
-	}
-	return score
-}
-
 // Default minimax function, returns pair of (score, array of best moves)
 func minimax(board *Board, depth int, isMaximizing bool, powers []int) (int, []string) {
 	if depth == 0 {
-		return EvalExpo(board, powers), []string{}
+		return board.Score, []string{} // Use the board's current score instead of recalculating
 	}
 
 	// Set result to very low/high initial value

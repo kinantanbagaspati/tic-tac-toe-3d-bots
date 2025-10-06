@@ -132,12 +132,12 @@ func concurrentMinimax(board *Board, depth int, isMaximizing bool, powers []int,
 // This version uses goroutines at every level of the recursion
 func concurrentMinimaxDeep(board *Board, depth int, isMaximizing bool, powers []int) (int, []string) {
 	if depth == 0 {
-		return EvalExpo(board, powers), []string{}
+		return board.Score, []string{} // Use the board's current score
 	}
 
 	validMoves := board.GetValidMoves()
 	if len(validMoves) == 0 {
-		return EvalExpo(board, powers), []string{}
+		return board.Score, []string{} // Use the board's current score
 	}
 
 	// For small number of moves or shallow depth, use sequential to avoid overhead
