@@ -67,10 +67,10 @@ func minimax(board *Board, depth int, isMaximizing bool) (int, []string) {
 	bestMoves := []string{}
 
 	for _, move := range board.GetValidMoves() {
-		// Create a deep copy of the board to test the move
-		testBoard := copyBoard(board)
-		testBoard.Move(move, symbol)
-		score, moves := minimax(testBoard, depth-1, !isMaximizing)
+		board.Move(move, symbol)
+		score, moves := minimax(board, depth-1, !isMaximizing)
+		board.UnMove(move)
+
 		if isMaximizing && score > bestScore {
 			bestScore = score
 			bestMoves = append([]string{move}, moves...)

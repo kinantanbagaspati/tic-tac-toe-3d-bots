@@ -108,6 +108,29 @@ func copyBoard(original *Board) *Board {
 	return newBoard
 }
 
+// parseMove extracts column and row from move string (e.g., "A1" -> col=0, row=0)
+// Returns (-1, -1) if the move string is invalid
+func parseMove(moveStr string) (int, int) {
+	if len(moveStr) < 2 {
+		return -1, -1
+	}
+
+	// Get column
+	col := int(moveStr[0]) - int('A')
+
+	// Get row
+	row := 0
+	for i := 1; i < len(moveStr); i++ {
+		if moveStr[i] < '0' || moveStr[i] > '9' {
+			return -1, -1
+		}
+		row = row*10 + int(moveStr[i]-'0')
+	}
+	row-- // Convert from 1-based to 0-based indexing
+
+	return col, row
+}
+
 // Print displays the board in a 2D projection
 func (b *Board) Print() {
 	toPrint := make([][]byte, b.Length+b.Width+b.Height-2)
@@ -134,26 +157,9 @@ func (b *Board) Print() {
 // Move places a player's piece at the specified position
 // Returns the coordinates where the piece was placed as [3]int, or [-1, -1, -1] if invalid
 func (b *Board) Move(moveStr string, player byte) [3]int {
-	if len(moveStr) < 2 {
-		return [3]int{-1, -1, -1}
-	}
-
-	// Get column
-	col := int(moveStr[0]) - int('A')
-	if col < 0 || col >= b.Length {
-		return [3]int{-1, -1, -1}
-	}
-
-	// Get row
-	row := 0
-	for i := 1; i < len(moveStr); i++ {
-		if moveStr[i] < '0' || moveStr[i] > '9' {
-			return [3]int{-1, -1, -1}
-		}
-		row = row*10 + int(moveStr[i]-'0')
-	}
-	row--
-	if row < 0 || row >= b.Width {
+	// Parse the move string
+	col, row := parseMove(moveStr)
+	if col < 0 || col >= b.Length || row < 0 || row >= b.Width {
 		return [3]int{-1, -1, -1}
 	}
 
@@ -163,18 +169,49 @@ func (b *Board) Move(moveStr string, player byte) [3]int {
 		return [3]int{-1, -1, -1}
 	}
 
-	// Calculate score delta before placing the piece
-	delta := b.DeltaEvaluate(col, row, currentHeight, player)
-
-	// Place the piece
+	// Place the piece first
 	b.Grid[col][row][currentHeight] = player
 	b.CurrentHeights[col][row]++
 	b.LastMove = [3]int{col, row, currentHeight}
+
+	// Calculate score delta after placing the piece
+	delta := b.DeltaEvaluate(col, row, currentHeight)
 
 	// Update the board's score with the delta
 	b.Score += delta
 
 	return b.LastMove
+}
+
+// UnMove reverses a move at the given position by removing the topmost piece
+// and updating the score accordingly
+func (b *Board) UnMove(moveStr string) [3]int {
+	// Parse the move string
+	col, row := parseMove(moveStr)
+	if col < 0 || col >= b.Length || row < 0 || row >= b.Width {
+		return [3]int{-1, -1, -1}
+	}
+
+	// Check if there's a piece to remove
+	currentHeight := b.CurrentHeights[col][row]
+	if currentHeight <= 0 {
+		return [3]int{-1, -1, -1}
+	}
+
+	// Get the height of the topmost piece (0-based)
+	topHeight := currentHeight - 1
+
+	// Calculate the delta before removing the piece
+	delta := b.DeltaEvaluate(col, row, topHeight)
+
+	// Remove the piece
+	b.Grid[col][row][topHeight] = '|'
+	b.CurrentHeights[col][row]--
+
+	// Reverse the score delta
+	b.Score -= delta
+
+	return [3]int{col, row, topHeight}
 }
 
 // IsValidCoordinate checks if the given coordinates are within board bounds
@@ -302,15 +339,17 @@ func (b *Board) Evaluate() int {
 	return score
 }
 
-// DeltaEvaluate calculates the change in evaluation score when placing a piece at the given coordinates
-// This is much more efficient than recalculating the entire board
-func (b *Board) DeltaEvaluate(x, y, z int, symbol byte) int {
+// DeltaEvaluate calculates the change in evaluation score for a piece at the given coordinates
+// The piece must already be placed on the board. This is much more efficient than recalculating the entire board
+func (b *Board) DeltaEvaluate(x, y, z int) int {
 	directions := [][3]int{
 		{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, // 1D
 		{1, 1, 0}, {1, -1, 0}, {1, 0, 1}, {1, 0, -1}, {0, 1, 1}, {0, 1, -1}, // 2D diagonals
 		{1, 1, 1}, {1, -1, -1}, {1, 1, -1}, {1, -1, 1}, // 3D diagonals
 	}
 
+	// Get the symbol of the piece at this position
+	symbol := b.Grid[x][y][z]
 	delta := 0
 
 	// For each direction, check all lines that pass through this position
@@ -330,10 +369,31 @@ func (b *Board) DeltaEvaluate(x, y, z int, symbol byte) int {
 				continue
 			}
 
-			// Get the line before the move
-			lineBefor := b.GetLine([3]int{startX, startY, startZ}, dir)
-			xCountBefore := countBytes(lineBefor, 'x')
-			oCountBefore := countBytes(lineBefor, 'o')
+			// Get the current line (with the piece already placed)
+			lineAfter := b.GetLine([3]int{startX, startY, startZ}, dir)
+			xCountAfter := countBytes(lineAfter, 'x')
+			oCountAfter := countBytes(lineAfter, 'o')
+
+			// Calculate score contribution with the piece
+			scoreAfter := 0
+			if xCountAfter > 0 && oCountAfter == 0 && xCountAfter <= b.WinLength {
+				scoreAfter += int(math.Pow(float64(b.Base), float64(xCountAfter)))
+			} else if oCountAfter > 0 && xCountAfter == 0 && oCountAfter <= b.WinLength {
+				scoreAfter -= int(math.Pow(float64(b.Base), float64(oCountAfter)))
+			}
+
+			// Calculate what the counts were before the move
+			var xCountBefore, oCountBefore int
+			if symbol == 'x' {
+				xCountBefore = xCountAfter - 1
+				oCountBefore = oCountAfter
+			} else if symbol == 'o' {
+				xCountBefore = xCountAfter
+				oCountBefore = oCountAfter - 1
+			} else {
+				// Invalid symbol, skip this calculation
+				continue
+			}
 
 			// Calculate score contribution before the move
 			scoreBefore := 0
@@ -341,24 +401,6 @@ func (b *Board) DeltaEvaluate(x, y, z int, symbol byte) int {
 				scoreBefore += int(math.Pow(float64(b.Base), float64(xCountBefore)))
 			} else if oCountBefore > 0 && xCountBefore == 0 && oCountBefore <= b.WinLength {
 				scoreBefore -= int(math.Pow(float64(b.Base), float64(oCountBefore)))
-			}
-
-			// Calculate counts after the move
-			var xCountAfter, oCountAfter int
-			if symbol == 'x' {
-				xCountAfter = xCountBefore + 1
-				oCountAfter = oCountBefore
-			} else {
-				xCountAfter = xCountBefore
-				oCountAfter = oCountBefore + 1
-			}
-
-			// Calculate score contribution after the move
-			scoreAfter := 0
-			if xCountAfter > 0 && oCountAfter == 0 && xCountAfter <= b.WinLength {
-				scoreAfter += int(math.Pow(float64(b.Base), float64(xCountAfter)))
-			} else if oCountAfter > 0 && xCountAfter == 0 && oCountAfter <= b.WinLength {
-				scoreAfter -= int(math.Pow(float64(b.Base), float64(oCountAfter)))
 			}
 
 			// Add the delta for this line
