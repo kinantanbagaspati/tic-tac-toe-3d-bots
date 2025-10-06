@@ -137,6 +137,7 @@ func parseMove(moveStr string) (int, int) {
 }
 
 // Print displays the board in a 2D projection
+// Shows winning lines and check threats with capital letters and '#' for critical cells
 func (b *Board) Print() {
 	toPrint := make([][]byte, b.Length+b.Width+b.Height-2)
 	for i := range toPrint {
@@ -146,10 +147,105 @@ func (b *Board) Print() {
 		}
 	}
 
+	// First, fill in the normal board state
 	for i := 0; i < b.Length; i++ {
 		for j := 0; j < b.Width; j++ {
 			for k := 0; k < b.Height; k++ {
 				toPrint[i+b.Width-j+b.Height-k-2][i*b.Width+j] = b.Grid[i][j][k]
+			}
+		}
+	}
+
+	directions := [][3]int{
+		{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, // 1D
+		{1, 1, 0}, {1, -1, 0}, {1, 0, 1}, {1, 0, -1}, {0, 1, 1}, {0, 1, -1}, // 2D diagonals
+		{1, 1, 1}, {1, -1, -1}, {1, 1, -1}, {1, -1, 1}, // 3D diagonals
+	}
+
+	// Check all lines for winning conditions and check threats
+	for i := 0; i < b.Length; i++ {
+		for j := 0; j < b.Width; j++ {
+			for k := 0; k < b.Height; k++ {
+				for _, dir := range directions {
+					// Check if this line segment is valid
+					endX := i + (b.WinLength-1)*dir[0]
+					endY := j + (b.WinLength-1)*dir[1]
+					endZ := k + (b.WinLength-1)*dir[2]
+
+					if !b.IsValidCoordinate(endX, endY, endZ) {
+						continue
+					}
+
+					line := b.GetLine([3]int{i, j, k}, dir)
+					xCount := countBytes(line, 'x')
+					oCount := countBytes(line, 'o')
+					emptyCount := countBytes(line, '|')
+
+					// Case 1: Winning line (all pieces of one player)
+					if (xCount == b.WinLength) || (oCount == b.WinLength) {
+						// Highlight all pieces in winning line as capitals
+						for pos := 0; pos < b.WinLength; pos++ {
+							x := i + pos*dir[0]
+							y := j + pos*dir[1]
+							z := k + pos*dir[2]
+
+							printY := x + b.Width - y + b.Height - z - 2
+							printX := x*b.Width + y
+
+							if printY >= 0 && printY < len(toPrint) && printX >= 0 && printX < len(toPrint[printY]) {
+								currentPiece := toPrint[printY][printX]
+								if currentPiece == 'x' {
+									toPrint[printY][printX] = 'X'
+								} else if currentPiece == 'o' {
+									toPrint[printY][printX] = 'O'
+								}
+							}
+						}
+					}
+
+					// Case 2: Check threat (winLength-1 pieces + 1 empty that can be played)
+					if emptyCount == 1 && (oCount == 0 || xCount == 0) {
+						var criticalCell [3]int
+
+						// Find the empty cell
+						for pos := 0; pos < b.WinLength; pos++ {
+							x := i + pos*dir[0]
+							y := j + pos*dir[1]
+							z := k + pos*dir[2]
+
+							if b.Grid[x][y][z] == '|' {
+								criticalCell = [3]int{x, y, z}
+								break
+							}
+						}
+
+						// Check if the critical cell can actually be played (correct height)
+						canBePlayed := (criticalCell[2] == b.CurrentHeights[criticalCell[0]][criticalCell[1]])
+
+						if canBePlayed {
+							// Highlight threat line pieces in capital letters
+							for pos := 0; pos < b.WinLength; pos++ {
+								x := i + pos*dir[0]
+								y := j + pos*dir[1]
+								z := k + pos*dir[2]
+
+								printY := x + b.Width - y + b.Height - z - 2
+								printX := x*b.Width + y
+
+								if printY >= 0 && printY < len(toPrint) && printX >= 0 && printX < len(toPrint[printY]) {
+									currentPiece := toPrint[printY][printX]
+									if currentPiece == 'x' {
+										toPrint[printY][printX] = 'X'
+									} else if currentPiece == 'o' {
+										toPrint[printY][printX] = 'O'
+									} else if currentPiece == '|' {
+										toPrint[printY][printX] = '#'
+									}
+								}
+							}
+						}
+					}
+				}
 			}
 		}
 	}
