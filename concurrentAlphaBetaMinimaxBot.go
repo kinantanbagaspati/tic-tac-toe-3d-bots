@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 )
 
 // ConcurrentAlphaBetaMinimaxBot represents a concurrent minimax AI player with alpha-beta pruning
@@ -24,20 +23,27 @@ func NewConcurrentAlphaBetaMinimaxBot(symbol byte, name string, depth int, base 
 	}
 }
 
-// MakeMove makes a move using concurrent alpha-beta pruning minimax algorithm (implements BotInterface)
+// MakeMove makes a move using streaming concurrent alpha-beta pruning minimax algorithm (implements BotInterface)
 func (bot *ConcurrentAlphaBetaMinimaxBot) MakeMove(board *Board) (string, [3]int) {
-	// Use extreme threshold for root call (no pruning constraint from parent)
-	isMaximizing := bot.Symbol == 'x'
-	threshold := MIN_INT // If we're maximizing, use MIN_INT (can never prune)
-	if !isMaximizing {
-		threshold = MAX_INT // If we're minimizing, use MAX_INT (can never prune)
+	// Use streaming concurrent minimax
+	resultCh := concurrentAlphaBetaMinimaxStream(board, bot.Depth, bot.Symbol == 'x', context.Background())
+
+	var bestMove string
+
+	// Listen to the stream until we get the final result
+	for result := range resultCh {
+		if result.Final {
+			bestMove = result.Move
+			break
+		}
+		// Keep updating with better moves as they're found
+		bestMove = result.Move
 	}
 
-	_, bestMoves := concurrentAlphaBetaMinimax(board, bot.Depth, isMaximizing, threshold, nil)
-	if len(bestMoves) == 0 {
+	if bestMove == "" {
 		return "", [3]int{-1, -1, -1} // No valid moves
 	}
-	bestMove := bestMoves[0] // Pick the first best move
+
 	coords := board.Move(bestMove, bot.Symbol)
 	return bestMove, coords
 }
@@ -52,160 +58,170 @@ func (bot *ConcurrentAlphaBetaMinimaxBot) getSymbol() byte {
 	return bot.Symbol
 }
 
-// SharedScore represents a thread-safe score that can be updated and read by goroutines
-type SharedScore struct {
-	score int64 // Use int64 for atomic operations
+// StreamResult represents a streaming result from minimax evaluation
+type StreamResult struct {
+	Move  string
+	Score int
+	Final bool // true if this is the final result for this branch
 }
 
-// Get returns the current score
-func (s *SharedScore) Get() int {
-	return int(atomic.LoadInt64(&s.score))
-}
+// concurrentAlphaBetaMinimaxStream performs streaming concurrent minimax with alpha-beta pruning
+// Returns a channel that continuously emits better moves as they're discovered
+func concurrentAlphaBetaMinimaxStream(board *Board, depth int, isMaximizing bool, parentCtx context.Context) <-chan StreamResult {
+	resultCh := make(chan StreamResult, 10) // Buffered for streaming
 
-// Update atomically updates the score if the new score is better
-func (s *SharedScore) Update(newScore int, isMaximizing bool) bool {
-	for {
-		current := atomic.LoadInt64(&s.score)
-		if (isMaximizing && newScore <= int(current)) || (!isMaximizing && newScore >= int(current)) {
-			return false // New score is not better
-		}
-		if atomic.CompareAndSwapInt64(&s.score, current, int64(newScore)) {
-			return true // Successfully updated
-		}
-		// Retry if another goroutine updated the score
-	}
-}
-
-// concurrentAlphaBetaMinimax performs concurrent minimax with alpha-beta pruning
-// parentScore: shared score that can be read to check for pruning conditions
-func concurrentAlphaBetaMinimax(board *Board, depth int, isMaximizing bool, threshold int, parentScore *SharedScore) (int, []string) {
-	// Check for winning conditions first
-	winner := board.CheckWin()
-	if winner != '|' {
-		if winner == 'x' {
-			return MAX_INT / 2, []string{} // X wins
-		} else {
-			return MIN_INT / 2, []string{} // O wins
-		}
-	}
-
-	if depth == 0 {
-		return board.Score, []string{} // Use the board's current score
-	}
-
-	validMoves := board.GetValidMoves()
-	if len(validMoves) == 0 {
-		return board.Score, []string{} // Use the board's current score
-	}
-
-	// For small number of moves or shallow depth, use sequential to avoid overhead
-	if len(validMoves) <= 2 || depth <= 2 {
-		return alphaBetaMinimax(board, depth, isMaximizing, threshold)
-	}
-
-	// Set result to very low/high initial value
-	symbol := byte('x')
-	initialScore := MIN_INT
-	if !isMaximizing {
-		symbol = 'o'
-		initialScore = MAX_INT
-	}
-
-	// Shared score for this level - child goroutines will monitor this
-	currentScore := &SharedScore{}
-	atomic.StoreInt64(&currentScore.score, int64(initialScore))
-
-	// Context for cancellation when pruning occurs
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Channel to collect results from goroutines
-	results := make(chan MoveResult, len(validMoves))
-	var wg sync.WaitGroup
-
-	// Launch goroutines for each move
-	for _, move := range validMoves {
-		wg.Add(1)
-		go func(move string) {
-			defer wg.Done()
-
-			// Check if we should terminate early due to parent's score update
-			select {
-			case <-ctx.Done():
-				return // Parent found a better path, terminate
-			default:
-			}
-
-			// Create a deep copy of the board to test the move
-			testBoard := copyBoard(board)
-			testBoard.Move(move, symbol)
-
-			// Check pruning condition based on parent's current score
-			if parentScore != nil {
-				parentCurrentScore := parentScore.Get()
-				if isMaximizing && parentCurrentScore <= threshold {
-					// Parent is minimizing and found a score <= threshold, so it will prune us
-					return
-				}
-				if !isMaximizing && parentCurrentScore >= threshold {
-					// Parent is maximizing and found a score >= threshold, so it will prune us
-					return
-				}
-			}
-
-			// Pass current score as threshold for child nodes
-			childThreshold := currentScore.Get()
-			score, _ := concurrentAlphaBetaMinimax(testBoard, depth-1, !isMaximizing, childThreshold, currentScore)
-
-			// Check if we've been cancelled while computing
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-
-			results <- MoveResult{Move: move, Score: score}
-		}(move)
-	}
-
-	// Goroutine to close results channel when all workers are done
 	go func() {
-		wg.Wait()
-		close(results)
+		defer close(resultCh)
+
+		// Check for winning conditions first
+		winner := board.CheckWin()
+		if winner != '|' {
+			if winner == 'x' {
+				resultCh <- StreamResult{Move: "", Score: MAX_INT / 2, Final: true}
+			} else {
+				resultCh <- StreamResult{Move: "", Score: MIN_INT / 2, Final: true}
+			}
+			return
+		}
+
+		if depth == 0 {
+			resultCh <- StreamResult{Move: "", Score: board.Score, Final: true}
+			return
+		}
+
+		validMoves := board.GetValidMoves()
+		if len(validMoves) == 0 {
+			resultCh <- StreamResult{Move: "", Score: board.Score, Final: true}
+			return
+		}
+
+		// For small cases, use sequential to avoid overhead
+		if len(validMoves) <= 2 || depth <= 2 {
+			threshold := MIN_INT
+			if !isMaximizing {
+				threshold = MAX_INT
+			}
+			score, moves := alphaBetaMinimax(board, depth, isMaximizing, threshold)
+			move := ""
+			if len(moves) > 0 {
+				move = moves[0]
+			}
+			resultCh <- StreamResult{Move: move, Score: score, Final: true}
+			return
+		}
+
+		// Streaming concurrent evaluation
+		symbol := byte('x')
+		bestScore := MIN_INT
+		if !isMaximizing {
+			symbol = 'o'
+			bestScore = MAX_INT
+		}
+
+		var bestMove string
+
+		// Context for cancellation
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithCancel(parentCtx)
+		defer cancel()
+
+		// Channel to collect child results
+		childResults := make(chan StreamResult, len(validMoves)*2) // Buffer for multiple results per child
+		var wg sync.WaitGroup
+
+		// Launch goroutines for each move
+		for _, move := range validMoves {
+			wg.Add(1)
+			go func(move string) {
+				defer wg.Done()
+
+				// Create a deep copy for this move
+				testBoard := copyBoard(board)
+				testBoard.Move(move, symbol)
+
+				// Start streaming evaluation for this child
+				childCh := concurrentAlphaBetaMinimaxStream(testBoard, depth-1, !isMaximizing, ctx)
+
+				// Forward all results from child, tagging with the move
+				for childResult := range childCh {
+					select {
+					case <-ctx.Done():
+						return // Pruned by parent
+					case childResults <- StreamResult{
+						Move:  move,
+						Score: childResult.Score,
+						Final: childResult.Final,
+					}:
+					}
+
+					// Stop if child sent final result
+					if childResult.Final {
+						break
+					}
+				}
+			}(move)
+		}
+
+		// Close results channel when all workers are done
+		go func() {
+			wg.Wait()
+			close(childResults)
+		}()
+
+		// Process streaming results from all children
+		activeMoves := make(map[string]bool)
+		for _, move := range validMoves {
+			activeMoves[move] = true
+		}
+
+		for result := range childResults {
+			// Check if this result improves our best score
+			improved := false
+			if isMaximizing && result.Score > bestScore {
+				bestScore = result.Score
+				bestMove = result.Move
+				improved = true
+			} else if !isMaximizing && result.Score < bestScore {
+				bestScore = result.Score
+				bestMove = result.Move
+				improved = true
+			}
+
+			// Stream the improvement to parent
+			if improved {
+				select {
+				case <-parentCtx.Done():
+					return // Parent cancelled us
+				case resultCh <- StreamResult{Move: bestMove, Score: bestScore, Final: false}:
+				}
+
+				// Check if we can prune remaining children (using reasonable thresholds)
+				if (isMaximizing && bestScore >= MAX_INT/3) || (!isMaximizing && bestScore <= MIN_INT/3) {
+					cancel() // Signal children to stop
+					break
+				}
+			}
+
+			// If this was a final result for this move, mark it as complete
+			if result.Final {
+				delete(activeMoves, result.Move)
+
+				// If all moves are complete, we're done
+				if len(activeMoves) == 0 {
+					break
+				}
+			}
+		}
+
+		// Send final result
+		select {
+		case <-parentCtx.Done():
+			return
+		case resultCh <- StreamResult{Move: bestMove, Score: bestScore, Final: true}:
+		}
 	}()
 
-	// Process results as they come in and update current score
-	bestScore := initialScore
-	bestMoves := []string{}
-
-	for result := range results {
-		if isMaximizing && result.Score > bestScore {
-			bestScore = result.Score
-			bestMoves = []string{result.Move} // Just store the immediate best move
-			currentScore.Update(bestScore, isMaximizing)
-
-			// Check if we can prune (our score beats the threshold)
-			if bestScore >= threshold {
-				cancel() // Signal other goroutines to terminate
-				break
-			}
-		} else if !isMaximizing && result.Score < bestScore {
-			bestScore = result.Score
-			bestMoves = []string{result.Move} // Just store the immediate best move
-			currentScore.Update(bestScore, isMaximizing)
-
-			// Check if we can prune (our score beats the threshold)
-			if bestScore <= threshold {
-				cancel() // Signal other goroutines to terminate
-				break
-			}
-		}
-	}
-
-	// Drain remaining results to prevent goroutine leaks
-	for range results {
-		// Consume any remaining results
-	}
-
-	return bestScore, bestMoves
+	return resultCh
 }

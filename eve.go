@@ -178,17 +178,17 @@ func createBot(choice int, symbol byte, defaultName string) BotInterface {
 	case 1:
 		return NewBot(symbol, defaultName)
 	case 2:
-		return NewNaiveMinimaxBot(symbol, defaultName, 4, 10) // Lower depth for naive approach
+		return NewNaiveMinimaxBot(symbol, defaultName, 6, 10)
 	case 3:
 		return NewMinimaxBot(symbol, defaultName, 6, 10)
 	case 4:
-		return NewAlphaBetaMinimaxBot(symbol, defaultName, 7, 10) // Higher depth due to pruning efficiency
+		return NewAlphaBetaMinimaxBot(symbol, defaultName, 6, 10)
 	case 5:
 		return NewConcurrentMinimaxBot(symbol, defaultName, 6, 10)
 	case 6:
-		return NewConcurrentMinimaxDeepBot(symbol, defaultName, 5, 10) // Lower depth due to overhead
+		return NewConcurrentMinimaxDeepBot(symbol, defaultName, 6, 10)
 	case 7:
-		return NewConcurrentAlphaBetaMinimaxBot(symbol, defaultName, 6, 10) // Concurrent alpha-beta pruning
+		return NewConcurrentAlphaBetaMinimaxBot(symbol, defaultName, 6, 10)
 	default:
 		return nil
 	}
