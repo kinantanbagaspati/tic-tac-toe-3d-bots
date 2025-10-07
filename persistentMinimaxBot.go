@@ -67,10 +67,10 @@ func NewPersistentMinimaxBot(symbol byte, name string, initialDepth int, base in
 		Base:         base,
 	}
 
-	// Initialize search tree with shallower initial depth
+	// Initialize search tree with deeper initial depth for better exploration
 	ctx, cancel := context.WithCancel(context.Background())
 	bot.tree = &SearchTree{
-		maxDepth:    2, // Start shallow and expand gradually
+		maxDepth:    6, // Start deeper to see more strategic patterns
 		nodes:       make(map[string]*SearchNode),
 		expandQueue: make(chan *SearchNode, 100), // buffered queue
 		ctx:         ctx,
@@ -96,13 +96,35 @@ func (bot *PersistentMinimaxBot) MakeMove(board *Board) (string, [3]int) {
 		bot.updateRoot(board)
 	}
 
-	// For now, use a simple approach - just get a valid move quickly
+	// Use a smarter approach - evaluate immediate scores for each move
 	validMoves := board.GetValidMoves()
 	bestMove := ""
-	if len(validMoves) > 0 {
-		bestMove = validMoves[0] // Take first valid move for now
+	bestScore := MIN_INT
+	if !bot.rootNode.IsMaximizing {
+		bestScore = MAX_INT
 	}
-	
+
+	// Quick evaluation of immediate moves
+	for _, move := range validMoves {
+		testBoard := copyBoard(board)
+		coords := testBoard.Move(move, bot.Symbol)
+		if coords[0] != -1 {
+			score := testBoard.Score
+
+			// Prefer this move if it's better
+			if (bot.rootNode.IsMaximizing && score > bestScore) ||
+				(!bot.rootNode.IsMaximizing && score < bestScore) {
+				bestScore = score
+				bestMove = move
+			}
+		}
+	}
+
+	// Fallback to first valid move if no scoring preference
+	if bestMove == "" && len(validMoves) > 0 {
+		bestMove = validMoves[0]
+	}
+
 	// Execute the move
 	coords := [3]int{-1, -1, -1}
 	if bestMove != "" {
@@ -164,7 +186,7 @@ func (bot *PersistentMinimaxBot) moveRoot(move string) {
 	}
 
 	bot.tree.mutex.Lock()
-	
+
 	// Find the child corresponding to the move
 	newRoot, exists := bot.rootNode.Children[move]
 	if !exists {
@@ -194,7 +216,7 @@ func (bot *PersistentMinimaxBot) moveRoot(move string) {
 	// Clean up old root
 	oldRoot.cancel()
 	delete(bot.tree.nodes, oldRoot.ID)
-	
+
 	bot.tree.mutex.Unlock() // Don't forget to unlock at the end
 }
 
@@ -225,7 +247,7 @@ func (bot *PersistentMinimaxBot) expandNode(node *SearchNode) {
 			currentMaxDepth := bot.tree.maxDepth
 			bot.tree.mutex.RUnlock()
 
-			if node.Depth >= currentMaxDepth || node.Depth >= 6 { // Hard limit at depth 6 to prevent explosion
+			if node.Depth >= currentMaxDepth || node.Depth >= 8 { // Increased depth limit for better analysis
 				// We're a leaf, calculate score if not done
 				if !node.calculating {
 					node.calculating = true
@@ -247,8 +269,9 @@ func (bot *PersistentMinimaxBot) expandNode(node *SearchNode) {
 					symbol = 'o'
 				}
 
-				// Limit the number of children to prevent goroutine explosion
-				maxChildren := 8
+				// Allow exploration of all valid moves for better strategic play
+				// Only limit if there are an excessive number of moves
+				maxChildren := 16 // Increased to allow full 4x4 board exploration
 				if len(validMoves) > maxChildren {
 					validMoves = validMoves[:maxChildren]
 				}
@@ -357,7 +380,7 @@ func (tree *SearchTree) backgroundExpander() {
 		case <-ticker.C:
 			// Gradually increase search depth, but cap it to prevent explosion
 			tree.mutex.Lock()
-			if tree.maxDepth < 6 { // Cap at depth 6
+			if tree.maxDepth < 8 { // Increased cap for deeper analysis
 				tree.maxDepth++
 			}
 			tree.mutex.Unlock()
@@ -417,10 +440,10 @@ func (bot *PersistentMinimaxBot) cleanup() {
 
 	bot.rootNode = nil
 
-	// Reinitialize tree
+	// Reinitialize tree with deeper search
 	ctx, cancel := context.WithCancel(context.Background())
 	bot.tree = &SearchTree{
-		maxDepth:    bot.InitialDepth,
+		maxDepth:    6, // Use deeper initial depth for better play
 		nodes:       make(map[string]*SearchNode),
 		expandQueue: make(chan *SearchNode, 100),
 		ctx:         ctx,
